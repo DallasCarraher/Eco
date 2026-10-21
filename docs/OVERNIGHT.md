@@ -95,7 +95,8 @@ cooperative resource locks, polling-limit overshoot and build provenance limits.
 4. Run the small pilot; inspect reports and actual backend detection. A Mac
    without a usable GPU session may need a logged-in session for GPU cases.
 5. Freeze the commit and binary. Run the bounded batch directly from a terminal.
-   On macOS, use `caffeinate -i` as shown above if sleep would interrupt it. The machine must remain powered and awake for the run.
+   On macOS, use `caffeinate -i` as shown above if sleep would interrupt it.
+   The machine must remain powered and awake for the run.
 
 No scheduler, remote login or automation has been configured by this roadmap.
 A one-shot overnight process is sufficient; recurring agent wakeups add no value

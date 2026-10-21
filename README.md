@@ -5,7 +5,7 @@ browser using WebAssembly and WebGPU.
 
 See the [roadmap](docs/ROADMAP.md), [agent work queue](docs/work-items/README.md),
 and [Mac mini overnight runbook](docs/OVERNIGHT.md) for the next milestones.
-The [deterministic experiment matrix](experiments/jak1-startup.json) is a
+The [deterministic experiment matrix](experiments/jak1-startup.json) is
 consumed by the bounded native runner in `scripts/run_experiments.py`; see the
 [runbook](docs/OVERNIGHT.md) for pilot, resume and overnight commands.
 
