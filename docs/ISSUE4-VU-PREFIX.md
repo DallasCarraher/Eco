@@ -1,5 +1,10 @@
 # Issue 4: bounded prefix comparison
 
+**Follow-up:** [whole-invocation checkpoint validation](ISSUE4-VU-WHOLE-INVOCATION.md)
+now completes this saved input exactly under an explicitly authorized finite
+offline budget. The production 8,192 guard remains unchanged; the prefix/Q
+investigation below records the earlier evidence and limits.
+
 This continuation investigates the saved invocation that exceeded whole-chain
 checking's 8,192-continuation guard. It does not raise that guard. The
 initial diagnostic change preserves execution semantics; the subsequent Q

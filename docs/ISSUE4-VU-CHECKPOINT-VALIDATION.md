@@ -1,5 +1,9 @@
 # Issue 4: bounded checkpoint implementation and validation
 
+**Follow-up:** the user-authorized [whole-invocation comparison](ISSUE4-VU-WHOLE-INVOCATION.md)
+completes this saved input after 9,363 continuations. The original partial-cycle
+results below remain preserved as history; the production guard is unchanged.
+
 The new diagnostic compares separately owned compiled/interpreter states in
 bounded chunks. An original finite synthetic invocation completes exactly after
 10,000 continuations / 100,003 instructions, with resumed chunks of 1, 7 and

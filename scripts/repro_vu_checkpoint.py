@@ -92,6 +92,22 @@ int main(int argc,char**argv) {
  const auto before=bounded.image;const auto issued=bounded.issued;bounded.advance(257);
  CHECK(bounded.continuations==8192 && bounded.issued==issued && equal(before,bounded.image));
  {Context context(bounded.image);CHECK(vu::regs(1).vi[10]==1808);}
+ // The authorized offline policy is a fixed invocation-wide ceiling too.
+ // Exercise a longer finite input so it actually exhausts 16384; changing the
+ // scheduling chunk size or resuming repeatedly cannot issue another fragment.
+ for(unsigned chunk: {1u,7u,257u}) {
+  Compiled larger(initial(20000),0,16384);Interpreter reference(larger.image);
+  while(larger.continuations<16384)larger.advance(chunk);
+  CHECK(!larger.complete && larger.stop==Compiled::Stop::continuation_limit);
+  CHECK(larger.issued==163843);
+  reference.advance(larger.issued);CHECK(equal(larger.image,reference.image));
+  {Context context(larger.image);CHECK(vu::regs(1).vi[10]==3616);}
+  const auto saved=larger.image;
+  for(unsigned again: {1u,8192u,16384u})larger.advance(again);
+  CHECK(larger.continuations==16384 && larger.issued==163843 && equal(saved,larger.image));
+ }
+ Compiled authorized(start,0,16384);while(!authorized.complete)authorized.advance(256);
+ CHECK(authorized.continuations==10000 && equal(authorized.image,whole.image));
  // Stop every single instruction: root jump/delay slot, flags, DIV, pending Q,
  // VI history, direct conditional branch, E and end delay slot. Independent old
  // Q assertion is made before the first WAITQ after DIV.
@@ -131,7 +147,7 @@ int main(int argc,char**argv) {
  const auto exhausted=infinite.image;infinite.advance(0);CHECK(equal(exhausted,infinite.image) && infinite.cursor.steps==1000000);
  Compiled unsupported(initial(),0);unsupported.advance(1);CHECK(!unsupported.complete && unsupported.stop==Compiled::Stop::unsupported_boundary);
  infinite.cursor.npc=3;infinite.advance(0);CHECK(infinite.cursor.stop==vu::FastStop::invalid_resume);
- std::cout<<"checkpoint: 10000 continuations/100003 instructions complete; chunks 1/7/257 exact; branch, end, pending Q, packet order and cumulative guards passed\n";
+ std::cout<<"checkpoint: 10000 continuations/100003 instructions complete; chunks 1/7/257 exact; branch, end, pending Q, packet order and 8192/16384 cumulative guards passed\n";
 }
 '''
 
@@ -168,6 +184,46 @@ int main(int argc,char**argv) {
 }
 '''
 
+
+POLICY_DRIVER = r'''
+#define main replay_main
+#include "scripts/replay_vu_checkpoint.cpp"
+#undef main
+void vu1_0000000000040001(ps2::Vu0Regs&,std::uint8_t*);
+void vu1_0000000000040002(ps2::Vu0Regs&,std::uint8_t*);
+int main(int argc,char**argv) {
+ using namespace ps2;
+ if(argc!=3)return 2;
+ const std::string prefix=std::string(argv[2])+"/policy-input";
+ auto write=[&](const char*s,const void*p,unsigned n){std::ofstream(prefix+s,std::ios::binary).write((const char*)p,n);};
+ const auto prepare=[&](unsigned counter){
+  vu::reset();if(!std::ifstream(argv[1],std::ios::binary).read((char*)g_vu1_code,16384))return false;
+  auto &r=vu::regs(1);r.vi[9]=16;r.vi[10]=counter;r.vi[13]=1;r.q=0x3F800000;r.vf[1].w[0]=0x3F800000;r.vf[2].w[0]=0x40000000;
+  std::memset(g_vu1_mem,0,16384);const std::uint64_t tag=0x8000;std::memcpy(g_vu1_mem,&tag,8);std::memcpy(g_vu1_mem+16,&tag,8);
+  write("-code.bin",g_vu1_code,16384);write("-before.bin",&r,sizeof r);write("-memory.bin",g_vu1_mem,16384);
+  vuops::FlagDispatch scope(r);write("-pipe.bin",&vuops::g_dispatch_flags,sizeof(vuops::FlagPipe));
+  std::ofstream(prefix+"-meta.txt")<<"0 0 0 -1\n";
+  auto key=[](unsigned pc){return vu::program_key(g_vu1_code,vu::reachable(g_vu1_code,16383,pc),pc);};
+  vu::Program programs[]={{key(0),vu1_0000000000040001},{key(0x80),vu1_0000000000040002}};vu::register_programs(programs,2);
+  return true;
+ };
+ auto invoke=[&](const std::string& name,const char* budget=nullptr){
+  const std::string out=std::string(argv[2])+"/"+name;
+  char* args[]={argv[0],const_cast<char*>(prefix.c_str()),const_cast<char*>(out.c_str()),const_cast<char*>("256"),const_cast<char*>("--continuations"),const_cast<char*>(budget)};
+  return replay_main(budget?6:4,args);
+ };
+ if(!prepare(10000))return 2;
+ if(invoke("default")!=4 || invoke("explicit-8192","8192")!=4 || invoke("complete-16384","16384")!=0)return 1;
+ if(!prepare(20000) || invoke("partial-16384","16384")!=4)return 1;
+ for(const char* value: {"0","8193","16385","32768","-1","unlimited"}) {
+  const std::string name=std::string("invalid-")+value;
+  if(invoke(name,value)!=2 || std::filesystem::exists(std::filesystem::path(argv[2])/name))return 1;
+ }
+ std::cout<<"CLI policies: default/explicit 8192 partial; explicit 16384 complete or partial; invalid ceilings rejected\n";
+ return 0;
+}
+'''
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--output', type=Path, required=True)
@@ -182,7 +238,7 @@ def main():
     (d/'tmp').mkdir()
     env = {k: v for k, v in os.environ.items() if not k.startswith('PS2_')}
     env['TMPDIR'] = str(d/'tmp')
-    inputs = [a.runtime.resolve(), a.wgpu.resolve(), Path(__file__), ROOT/'scripts/vu_checkpoint.hpp', ROOT/'runtime/src/vu_micro.cpp', ROOT/'scripts/replay_vu_snapshot.cpp']
+    inputs = [a.runtime.resolve(), a.wgpu.resolve(), Path(__file__), ROOT/'scripts/vu_checkpoint.hpp', ROOT/'runtime/src/vu_micro.cpp', ROOT/'scripts/replay_vu_snapshot.cpp', ROOT/'scripts/replay_vu_checkpoint.cpp']
     (d/'inputs.json').write_text(json.dumps({str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}, indent=2)+'\n')
     def run(*argv):
         commands.append(list(map(str, argv)))
@@ -202,6 +258,24 @@ def main():
         '-framework','CoreFoundation','-framework','IOKit','-framework','IOSurface',
         '-lobjc','-o',d/'fallback')
     run(d/'fallback',d/'code.bin',d)
+    (d/'policy.cpp').write_text(POLICY_DRIVER)
+    run('clang++','-std=c++20','-O2','-I.','-Iruntime/include','-Iruntime/src',
+        d/'policy.cpp',d/'native.cpp',a.runtime.resolve(),a.wgpu.resolve(),
+        '-framework','Metal','-framework','QuartzCore','-framework','Foundation',
+        '-framework','CoreFoundation','-framework','IOKit','-framework','IOSurface',
+        '-lobjc','-o',d/'policy')
+    run(d/'policy',d/'code.bin',d)
+    for name, ceiling, complete, continuations, issued in (
+        ('default', 8192, False, 8192, 81923),
+        ('explicit-8192', 8192, False, 8192, 81923),
+        ('complete-16384', 16384, True, 10000, 100003),
+        ('partial-16384', 16384, False, 16384, 163843),
+    ):
+        status = json.loads((d/name/'status.json').read_text())
+        assert status['aggregate_continuation_limit'] == ceiling
+        assert status['full_invocation_compared'] is complete
+        assert status['state'] == ('complete_match' if complete else 'matched_partial')
+        assert status['continuations'] == continuations and status['issued'] == issued
     return 0
 
 if __name__ == '__main__':

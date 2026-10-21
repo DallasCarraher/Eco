@@ -6,9 +6,18 @@ void register_generated_vu();
 int main(int argc,char**argv) {
     using namespace ps2;
     using namespace vu_checkpoint;
-    if(argc!=4) {std::cerr<<"usage: replay_vu_checkpoint INPUT_PREFIX NEW_OUTPUT_DIRECTORY CHUNK_CONTINUATIONS\n";return 2;}
+    if(argc!=4 && argc!=6) {std::cerr<<"usage: replay_vu_checkpoint INPUT_PREFIX NEW_OUTPUT_DIRECTORY CHUNK_CONTINUATIONS [--continuations 8192|16384]\n";return 2;}
     char* end=nullptr;const auto chunk=std::strtoul(argv[3],&end,10);
     if(!end || *end || chunk<1 || chunk>8192)return 2;
+    unsigned aggregate_limit=8192;
+    if(argc==6) {
+        if(std::string(argv[4])!="--continuations")return 2;
+        const auto value=std::strtoul(argv[5],&end,10);
+        // Explicit diagnostic policies, never an unbounded arbitrary ceiling.
+        // The production guard remains 8192 and the default is unchanged.
+        if(!end || *end || (value!=8192 && value!=16384))return 2;
+        aggregate_limit=static_cast<unsigned>(value);
+    }
     const std::string input=argv[1];const std::filesystem::path output=argv[2];
     if(!std::filesystem::create_directory(output))return 2;
     auto load=[&](const char* suffix,void* dst,std::size_t size){
@@ -21,7 +30,7 @@ int main(int argc,char**argv) {
         if(!(std::ifstream(input+"-meta.txt")>>entry>>top>>itop>>unused) || (entry&7u) || entry>=16384)return 2;
         vu::set_tops(top,itop);vu::code_changed(1);register_generated_vu();
         vuops::FlagDispatch flags(vu::regs(1));load("-pipe.bin",&vuops::g_dispatch_flags,sizeof(vuops::FlagPipe));
-        Image initial;initial.save();Compiled compiled(initial,entry);Interpreter interpreted(initial);interpreted.entry=entry;
+        Image initial;initial.save();Compiled compiled(initial,entry,aggregate_limit);Interpreter interpreted(initial);interpreted.entry=entry;
         std::ofstream checkpoints(output/"checkpoints.jsonl");
         bool match=true;unsigned count=0;
         while(true) {
@@ -51,7 +60,7 @@ int main(int argc,char**argv) {
         std::ofstream status(output/"status.json");
         status<<"{\"state\":\""<<state<<"\",\"full_invocation_compared\":"<<(full?"true":"false")<<",\"chunks\":"<<count
             <<",\"continuations\":"<<compiled.continuations<<",\"issued\":"<<compiled.issued<<",\"next_pc\":"<<compiled.pc
-            <<",\"aggregate_continuation_limit\":8192,\"aggregate_instruction_limit\":1000000}\n";
+            <<",\"aggregate_continuation_limit\":"<<aggregate_limit<<",\"aggregate_instruction_limit\":1000000}\n";
         std::cout<<state<<": "<<count<<" checkpoints, "<<compiled.continuations<<" continuations, "<<compiled.issued<<" issued, PC "<<std::hex<<compiled.pc<<"\n";
         return full?0:match&&supported?4:1;
     } catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 2;}
