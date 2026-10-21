@@ -1,8 +1,9 @@
 # Issue 4: bounded prefix comparison
 
 This continuation investigates the saved invocation that exceeded whole-chain
-checking's 8,192-continuation guard. It does not raise that guard or change VU
-execution semantics. The existing native flags fix and its image results are
+checking's 8,192-continuation guard. It does not raise that guard. The
+initial diagnostic change preserves execution semantics; the subsequent Q
+correction is described below. The existing native flags fix and its image results are
 recorded in [the preceding report](ISSUE4-VU-FLAGS.md).
 
 ## Method and limits
@@ -100,3 +101,49 @@ python3 -m unittest discover -s scripts -p test_run_vu_prefix.py -v
 python3 -m unittest discover -s scripts -p test_run_experiments.py -v
 python3 scripts/test_vu_codegen.py
 ```
+
+## Observed Q discrepancy and original regression
+
+At diagnostic revision `9e14662`, both saved-prefix paths stop at next PC
+`1280`, after 113,104 issued instructions and 8,192 compiled continuations.
+Memory, packets and MAC/status/clip history match exactly. Raw register word
+140 (Q) differs: compiled `C4824B1E`, interpreted `BE0F0ABF`. Both pipes hold
+new Q `C4824B1E`, ready at clock 113,123; the checkpoint clock is 113,120.
+Compiled dispatch has already published it and cleared `q_pending`, while
+continuous interpretation retains old Q and the pending update. This is a
+real endpoint state difference, not a padding mismatch. No VF, memory or
+packet difference was observed at this checkpoint.
+
+The original `scripts/repro_vu_dispatch_q.py` isolates the ownership error
+without game inputs. DIV of 1 by 2 schedules Q; a register jump dispatches to
+a consumer before readiness. MULq must retain old Q=1 under Eco's existing
+seven-cycle DIV policy; after WAITQ, MULq must read Q=1/2. Exact power-of-two
+results avoid rounding ambiguities. An alternate direct-branch path issues
+DIV of 1 by 4 and tests its results too; it makes the shared reader's incoming
+timing explicitly dynamic. This tests pipeline continuity under the existing
+latency policy, not independent hardware validation of that policy.
+
+Before correction, native compiled and fallback execution produce `(1/2,1/2)`
+instead of `(1,1/2)` on the dispatch route. The boundary assertion also fails:
+Q=1/2, pending=false, clock=21, ready=24. The persistent Wasm translator,
+with a host callback that preserves the pipe, produces `(1,1)` because its
+consumer prologue clears the pending update. The alternate route passes.
+The complete failing output is `local/issue4-prefix/q-before.txt`.
+
+Commit `227037f` preserves pending Q on active native dispatch and in the
+persistent Wasm prologue/import. Native Q consumers honor an incoming pending
+update even when their own compiled fragment contains no Q producer. Normal
+invocation completion still flushes Q, and standalone calls retain their local
+pipe behavior. It changes neither Q latency nor shared static timing analysis.
+Both synthetic routes now pass for native compiled, interpreter fallback,
+continuous interpreter and Node/Wasm. The boundary retains old Q and a pending
+update at clock 21/ready 24. Expected results are unchanged.
+
+All preceding native/Wasm dispatch status/MAC/clip tests, reset/fresh-invocation
+checks, finite-loop/checkpoint assertions, eight native and eight Wasm codegen
+regressions, and five prefix-wrapper tests pass after this correction. Logs
+are `local/issue4-prefix/{q-after,flags-q,codegen-q,wrapper-q}.txt`.
+
+The Wasm synthetic isolates generated-module prologue ownership; it is not a
+browser or production-import integration replay. No browser parity or GS
+changes are part of this investigation.
