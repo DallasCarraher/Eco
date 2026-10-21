@@ -75,12 +75,16 @@ std::uint64_t g_reported = 0;
 bool g_reference_dry = false;
 // Opt-in call-local packet capture, including packets sent by the dry interpreter.
 std::vector<std::uint8_t> *g_check_packets = nullptr;
-// Offline diagnostics can stop one uninterrupted interpreter invocation at an
-// instruction boundary. A checkpoint never flushes Q or resets branch/flag state.
+// Offline diagnostics pause at committed instruction boundaries. Resumption also
+// requires the caller's exact registers, memory and active dispatch pipe; this
+// cursor alone is not a save state. Limits and steps are invocation-cumulative.
+enum class FastStop { checkpoint, complete, instruction_limit, invalid_resume };
 struct FastCheckpoint {
     std::uint32_t limit = 0, steps = 0, pc = 0, npc = 0;
     bool complete = false, ending = false, branch_live = false;
     std::uint16_t branch_before[16] = {};
+    bool resume = false;
+    FastStop stop = FastStop::checkpoint;
 };
 FastCheckpoint *g_fast_checkpoint = nullptr;
 
@@ -1113,19 +1117,38 @@ void run_fast(int n, std::uint32_t address) {
     if (count && ++calls % 20000 == 0) std::fprintf(stderr, "[vu1] %llu calls, %llu instructions\n", (unsigned long long)calls, (unsigned long long)total);
     BranchView view;
     auto *checkpoint = n == 1 ? g_fast_checkpoint : nullptr;
-    const auto checkpoint_at = [&](std::uint32_t steps, bool complete) {
+    std::uint32_t first_step = 0;
+    if (checkpoint && checkpoint->resume) {
+        if (!vuops::g_dispatch_flags_active || checkpoint->steps > 1'000'000 ||
+            checkpoint->pc > u.code_mask || checkpoint->npc > u.code_mask ||
+            (checkpoint->pc & 7u) || (checkpoint->npc & 7u) ||
+            (checkpoint->limit && checkpoint->limit < checkpoint->steps)) {
+            checkpoint->stop = FastStop::invalid_resume;
+            return;
+        }
+        if (checkpoint->complete) return;
+        first_step = checkpoint->steps;
+        pc = checkpoint->pc;
+        npc = checkpoint->npc;
+        ending = checkpoint->ending;
+        view.live = checkpoint->branch_live;
+        std::memcpy(view.before, checkpoint->branch_before, sizeof view.before);
+    }
+    const auto checkpoint_at = [&](std::uint32_t steps, FastStop stop) {
         if (!checkpoint) return;
         checkpoint->steps = steps;
         checkpoint->pc = pc;
         checkpoint->npc = npc;
-        checkpoint->complete = complete;
+        checkpoint->complete = stop == FastStop::complete;
         checkpoint->ending = ending;
         checkpoint->branch_live = view.live;
         std::memcpy(checkpoint->branch_before, view.before, sizeof view.before);
+        checkpoint->resume = true;
+        checkpoint->stop = stop;
     };
-    for (std::uint32_t steps = 0; steps < 1'000'000; ++steps, ++total) {
+    for (std::uint32_t steps = first_step; steps < 1'000'000; ++steps, ++total) {
         if (checkpoint && checkpoint->limit && steps == checkpoint->limit) {
-            checkpoint_at(steps, false);
+            checkpoint_at(steps, FastStop::checkpoint);
             return;
         }
         std::uint32_t lo, hi;
@@ -1176,12 +1199,12 @@ void run_fast(int n, std::uint32_t address) {
         if (ending) {
             pipe.flush_q(r);
             r.tpc = pc;
-            checkpoint_at(steps + 1, true);
+            checkpoint_at(steps + 1, FastStop::complete);
             return;
         }
         if (hi & 0x40000000u) ending = true;
     }
-    checkpoint_at(1'000'000, false);
+    checkpoint_at(1'000'000, FastStop::instruction_limit);
     std::fprintf(stderr, "[vu%d] program at 0x%04X did not end\n", n, address);
 }
 

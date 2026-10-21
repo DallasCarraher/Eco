@@ -1,5 +1,10 @@
 # Issue 4: resumable comparison design and admission blocker
 
+**Follow-up:** the user subsequently allocated 8 GiB of shared experiment
+storage. The [implementation and validation report](ISSUE4-VU-CHECKPOINT-VALIDATION.md)
+supersedes the admission blocker and proposed-only status below. This original
+read-only-cycle record is retained as history.
+
 This bounded cycle performed source analysis and read-only identity validation.
 It did **not** implement or execute resumable VU execution. Whole-invocation
 coverage remains blocked. The design and original regression specification below
