@@ -576,6 +576,7 @@ var Module = {
   noCard: params.has('nocard'),
   presentCopy: params.has('copy'),
   onHalt: (reason) => {
+    Module.running = false;
     clearTimeout(noteTimer);
     noteTimer = 0;
     statusEl.textContent = 'Halted: ' + reason;

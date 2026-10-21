@@ -34,6 +34,9 @@ const { chromium } = require(require.resolve('playwright', {
       .then(() => page.locator('#canvas').screenshot({ path: path.join(out, 'browser-boot.png') }))
       .catch(() => null);
     const result = await Promise.race([stopped, page.waitForTimeout(30000).then(() => 'observation_limit')]);
+    if (result === 'halted') {
+      await page.waitForFunction(() => document.getElementById('status').textContent.startsWith('Halted:'), undefined, { timeout: 5000 });
+    }
     const state = await page.evaluate(() => ({ frames: Module._ps2web_frames(),
       primitives: Module._ps2web_primitives(), gpu: Module.gpuInfo,
       isolated: crossOriginIsolated, status: document.getElementById('status').textContent }));

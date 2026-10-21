@@ -311,7 +311,7 @@ void *emulate(void *data) {
         }
     }
     ps2::run();
-    EM_ASM({
+    MAIN_THREAD_EM_ASM({
         if (typeof Module.onHalt === 'function')
             Module.onHalt(UTF8ToString($0));
     }, ps2::halt_reason().c_str());

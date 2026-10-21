@@ -34,6 +34,7 @@ const { chromium } = require(require.resolve('playwright', {
     });
     await page.locator('#start').click();
     await stopped;
+    await page.waitForFunction(() => document.getElementById('status').textContent === 'Halted: Exit', undefined, { timeout: 5000 });
     if (errors.length) throw new Error(errors.join('\n'));
     const result = { status: 'pass', browser: browser.version(), features,
       assertion: 'Recompiled original MIPS fixture reached its Exit syscall in browser WASM.',

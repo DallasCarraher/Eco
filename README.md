@@ -3,15 +3,20 @@
 An experimental effort to run **Jak and Daxter: The Precursor Legacy** in a
 browser using WebAssembly and WebGPU.
 
-**Status: experimental Jak boot; no playable scene verified.** The supplied
-USA Rev 1 disc boots through driver loading and into GOAL object initialization
-in the native runner. Heap snapshot support is being developed to translate
-the code that GOAL loads and relocates during startup. A small,
-original MIPS test program has been translated to C++, compiled for native
-Apple Silicon and WASM, and executed successfully in headless Chrome with
-WebGPU available. It does not draw a scene or establish gameplay compatibility.
-The original test program also runs in Chrome; Jak's browser behavior is a
-separate milestone.
+**Status: browser prototype; not playable yet.** The supplied USA Rev 1 disc
+boots in Chrome, displays the Sony startup screen, and enters animated 3D
+rendering. Geometry is visibly distorted and unexplored code paths can halt.
+The native runner completed a bounded 600-frame startup check; a Chrome 155
+check on Apple Silicon/Metal reached frame 887 and about 2.6 million primitives
+before a missing entry halted execution. Those are coverage observations, not
+performance benchmarks or full-game verification.
+
+Eco translates heap-loaded GOAL code, precompiles relocatable initialization
+templates, and includes a toSPR DMA tag-transfer fix needed by Jak's blend-shape
+animation packets. Synthetic native and WASM checks exercise patched instruction
+immediates independently of game data. Rendering accuracy and continued code
+coverage are the next blockers; controls, audio fidelity, and saves have not
+been validated for gameplay.
 
 Eco builds on [PS2 Web Recomp](https://github.com/snuri00/ps2-web-recomp) by
 snuri00, starting at commit `6526f4803d98e10de50bea3af104a4d26e9df033`.
