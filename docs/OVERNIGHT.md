@@ -22,20 +22,65 @@ provide the matrix runner's disk quotas, immutable case archives or resume
 contract. It is not the recommended unattended graphics experiment. Repeated
 exploration alone will not diagnose incorrect rendering.
 
-## First overnight-ready deliverable
+## Run a frozen native experiment
 
-Complete work item 01 against [the experiment contract](EXPERIMENTS.md).
-The proposed interface below is an acceptance target, **not an available command**:
+The runner for work item 01 is implemented. Build before starting it, then keep
+source, binary and generated code unchanged through the batch and any resume.
+The documented budgets are four hours total active time, 15 minutes per case,
+2 GiB aggregate output and at least 10 GiB free space. Execution is serial.
 
-```text
-python3 scripts/run_experiments.py --manifest experiments/jak1-startup.json
-  --iso /path/to/Jak.iso --runner build/native-jak1/ps2run
-  --elf games/jak1/disc/SCUS_971.24 --output local/experiments/<run-id>
+Validate the harness and original synthetic toolchain fixture first:
+
+```sh
+python3 -m unittest discover -s scripts -p test_run_experiments.py -v
+python3 scripts/jak_smoke.py --web --live-template
 ```
 
-A successful pilot must prove timeout/child cleanup, output limits and accurate
-result classification before the full matrix is left overnight. The batch must
-finish with a useful report even when every game case fails.
+The toolchain fixture writes only its own `toolchain-smoke` directories. Do not
+run another task using those directories concurrently. Web compilation requires
+the local Emscripten SDK; it does not execute a browser test.
+
+Run the three-case Jak pilot:
+
+```sh
+python3 scripts/run_experiments.py --manifest experiments/jak1-startup.json \
+  --iso "/path/to/Jak.iso" --runner build/native-jak1/ps2run \
+  --elf games/jak1/disc/SCUS_971.24 --generated generated/jak1 \
+  --output local/experiments/jak1-pilot --pilot
+```
+
+Inspect `summary.md` and `report.json`: the actual GPU backend, matching repeat
+captures, missing captures and honest stop classifications matter even if all
+cases halt. Each case has separate artifacts. A halt is not a gameplay result.
+Use a new output directory for another pilot; existing directories are rejected.
+
+After pilot review, the full matrix is the same command without `--pilot`, with
+a new output directory. To run it on macOS independent of the agent and terminal
+session (substitute the local ISO path):
+
+```sh
+mkdir -p local/experiments
+nohup caffeinate -i python3 scripts/run_experiments.py \
+  --manifest experiments/jak1-startup.json \
+  --iso "/path/to/Jak.iso" --runner build/native-jak1/ps2run \
+  --elf games/jak1/disc/SCUS_971.24 --generated generated/jak1 \
+  --output "local/experiments/jak1-overnight-$(date +%Y%m%d-%H%M%S)" \
+  > local/experiments/overnight-launch.log 2>&1 < /dev/null &
+```
+
+Save the output directory printed in the launch log. The launcher log is small;
+case logs/captures and reports are inside the bounded run directory. No active
+agent, model call, scheduler or network access is needed. `caffeinate` prevents
+idle sleep while the command runs; the Mac must remain powered.
+
+Resume a stopped run with **the same arguments and output directory**, adding
+`--resume` (and preserving `--pilot` for a pilot). Resume verifies every input
+and saved artifact hash before skipping sealed case reports. SIGINT/SIGTERM
+cancel the active case, stop its process group, and preserve pending work.
+Resume gives a cancelled case a new attempt directory. Recorded failures are
+not automatically retried. Limits belong to the manifest; a changed manifest
+requires a new run. See [the contract](EXPERIMENTS.md) for exact semantics,
+cooperative resource locks, polling-limit overshoot and build provenance limits.
 
 ## Prepare the Mac mini once
 
@@ -50,8 +95,8 @@ finish with a useful report even when every game case fails.
 4. Run the small pilot; inspect reports and actual backend detection. A Mac
    without a usable GPU session may need a logged-in session for GPU cases.
 5. Freeze the commit and binary. Run the bounded batch directly from a terminal.
-   On macOS, wrap the implemented command with `caffeinate -i` if sleep would
-   interrupt it. The machine must remain powered and awake for the run.
+   On macOS, use `caffeinate -i` as shown above if sleep would interrupt it.
+   The machine must remain powered and awake for the run.
 
 No scheduler, remote login or automation has been configured by this roadmap.
 A one-shot overnight process is sufficient; recurring agent wakeups add no value

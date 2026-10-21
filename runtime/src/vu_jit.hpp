@@ -7,6 +7,8 @@ namespace ps2::vu::jit {
 
 struct Layout {
     std::uint32_t flags = 0;
+    // The caller initializes one FlagPipe per logical invocation.
+    bool persistent_flags = false;
 };
 
 enum Import : std::uint32_t {

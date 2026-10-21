@@ -73,6 +73,17 @@ std::uint32_t q_delay_of(const Unit &u, std::uint32_t pc, std::uint32_t latency)
 
 std::uint64_t g_reported = 0;
 bool g_reference_dry = false;
+// Opt-in call-local packet capture, including packets sent by the dry interpreter.
+std::vector<std::uint8_t> *g_check_packets = nullptr;
+// Offline diagnostics can stop one uninterrupted interpreter invocation at an
+// instruction boundary. A checkpoint never flushes Q or resets branch/flag state.
+struct FastCheckpoint {
+    std::uint32_t limit = 0, steps = 0, pc = 0, npc = 0;
+    bool complete = false, ending = false, branch_live = false;
+    std::uint16_t branch_before[16] = {};
+};
+FastCheckpoint *g_fast_checkpoint = nullptr;
+
 
 Unit unit_of(int n) {
     if (n == 0) return Unit{&g_cpu.vu0, g_vu0_code, g_vu0_mem, 4095u, 256u, g_cpu.vu0.tpc};
@@ -445,7 +456,7 @@ float u2f(std::uint32_t v) {
 }
 
 void xgkick(Unit &u, std::uint32_t address) {
-    if (g_reference_dry) return;
+    if (g_reference_dry && !g_check_packets) return;
     std::uint8_t buffer[16 * 1024 + 16];
     std::uint32_t q = address & (u.data_qwords - 1), count = 0;
     bool done = false;
@@ -465,7 +476,16 @@ void xgkick(Unit &u, std::uint32_t address) {
             std::memcpy(buffer + count * 16, qword(u, q), 16);
         done = eop;
     }
-    gif::transfer(1, buffer, count);
+    if (g_check_packets) {
+        if (g_check_packets->size() + sizeof count + count * 16 > 1024 * 1024) {
+            std::fputs("[vu-check] packet capture exceeded 1 MiB per call\n", stderr);
+            std::abort();
+        }
+        const auto *n = reinterpret_cast<const std::uint8_t *>(&count);
+        g_check_packets->insert(g_check_packets->end(), n, n + sizeof count);
+        g_check_packets->insert(g_check_packets->end(), buffer, buffer + count * 16);
+    }
+    if (!g_reference_dry) gif::transfer(1, buffer, count);
 }
 
 // A VU branch that reads an integer register the instruction right before it
@@ -791,6 +811,7 @@ void check_jit(ProgramFn compiled, ProgramFn jit) {
     static std::uint64_t calls = 0, escapes = 0, mismatches = 0;
     static std::uint8_t before_mem[16384], jit_mem[16384];
     const Vu0Regs before = g_vu1;
+    const auto before_pipe = vuops::g_dispatch_flags;
     std::memcpy(before_mem, g_vu1_mem, sizeof before_mem);
     std::vector<std::uint32_t> jit_kicks, kicks;
     jit::g_dry = true;
@@ -802,6 +823,7 @@ void check_jit(ProgramFn compiled, ProgramFn jit) {
     const Vu0Regs after = g_vu1;
     std::memcpy(jit_mem, g_vu1_mem, sizeof jit_mem);
     g_vu1 = before;
+    vuops::g_dispatch_flags = before_pipe;
     std::memcpy(g_vu1_mem, before_mem, sizeof before_mem);
     std::int64_t escape = -1;
     g_kick_log = &kicks;
@@ -848,6 +870,7 @@ void interpret(int unit, std::uint32_t pc) {
         g_chained = pc;
         return;
     }
+    vuops::FlagDispatch flags(g_vu1);
     g_chaining = true;
     for (;;) {
         run_entry(1, pc);
@@ -872,32 +895,114 @@ void run_entry(int unit, std::uint32_t pc) {
             const ProgramFn jit = g_entries[(pc & 16383u) >> 3].jit;
             static std::uint64_t sampled = 0;
             static const bool check_vs_interpreter = std::getenv("PS2_VU_CHECK") != nullptr;
+            static const bool check_all = check_vs_interpreter && std::strcmp(std::getenv("PS2_VU_CHECK"), "all") == 0;
             static bool checking = false;
-            if (check_vs_interpreter && !checking && ++sampled % 64 == 0) {
-                // The interpreter is the reference: run the compiled function
-                // and, from the same state, the interpreter, and report the
-                // first registers or memory they disagree on.
-                static std::uint64_t checked = 0, mismatches = 0;
+            if (check_vs_interpreter && !checking && (check_all || ++sampled % 64 == 0)) {
+                // Compare two implementations from the same state. Neither is
+                // an independent correctness oracle. "all" checks every
+                // eligible dispatch chain and captures the first non-flag discrepancy.
+                static std::uint64_t checked = 0, mismatches = 0, escaped = 0, nonflags = 0;
+                struct ChainStats {
+                    bool enabled;
+                    std::uint64_t chains = 0, continuations = 0, fallbacks = 0, mismatches = 0, nonflags = 0;
+                    ~ChainStats() {
+                        if (enabled) std::fprintf(stderr,
+                            "[vu-chain-summary] compared %llu chains, %llu continuations, %llu interpreter fallbacks, %llu mismatches, %llu nonflag\n",
+                            (unsigned long long)chains, (unsigned long long)continuations, (unsigned long long)fallbacks,
+                            (unsigned long long)mismatches, (unsigned long long)nonflags);
+                    }
+                };
+                static ChainStats stats{check_all};
+                std::vector<std::uint8_t> compiled_packets, interpreted_packets;
                 static std::uint8_t before_mem[16384], run_mem[16384];
                 const Vu0Regs before = g_vu1;
+                const auto before_pipe = vuops::g_dispatch_flags;
                 std::memcpy(before_mem, g_vu1_mem, sizeof before_mem);
                 std::int64_t escape = -1;
-                const std::uint64_t key = program_key(g_vu1_code, reachable(g_vu1_code, 16383u, pc & 16383u), pc & 16383u);
+                const std::uint64_t key = check_all ? g_entries[(pc & 16383u) >> 3].key :
+                    program_key(g_vu1_code, reachable(g_vu1_code, 16383u, pc & 16383u), pc & 16383u);
+                if (check_all) g_check_packets = &compiled_packets;
                 g_capture = &escape;
                 fn(g_vu1, g_vu1_mem);
+                if (check_all) {
+                    // Follow dispatch boundaries just as the compiled runtime does,
+                    // then compare with one uninterrupted interpreter invocation.
+                    for (unsigned segments = 0; escape >= 0; ++segments) {
+                        if (segments >= 8192) {
+                            // Preserve a bounded reproducer instead of extending the guard.
+                            const auto dump = [](const char *name, const void *data, std::size_t size) {
+                                std::ofstream(name, std::ios::binary).write(static_cast<const char *>(data), size);
+                            };
+                            std::ofstream("vu-limit-meta.txt") << pc << " " << g_top << " " << g_itop << " -1\n";
+                            dump("vu-limit-code.bin", g_vu1_code, 16384);
+                            dump("vu-limit-before.bin", &before, sizeof before);
+                            dump("vu-limit-memory.bin", before_mem, sizeof before_mem);
+                            dump("vu-limit-pipe.bin", &before_pipe, sizeof before_pipe);
+                            std::fprintf(stderr,
+                                "[vu-check] chain exceeded 8192 segments: frame %llu key %016llX entry %04X chain %llu next %04X issue-clock %u/%u\n",
+                                (unsigned long long)frame_count(), (unsigned long long)key, pc,
+                                (unsigned long long)checked, (unsigned)escape, before_pipe.t, vuops::g_dispatch_flags.t);
+                            std::abort();
+                        }
+                        const auto next = static_cast<std::uint32_t>(escape);
+                        escape = -1;
+                        ++stats.continuations;
+                        if (const ProgramFn continuation = lookup(next)) continuation(g_vu1, g_vu1_mem);
+                        else { ++stats.fallbacks; run_fast(1, next); }
+                    }
+                }
                 g_capture = nullptr;
                 const Vu0Regs after = g_vu1;
+                const auto after_pipe = vuops::g_dispatch_flags;
                 std::memcpy(run_mem, g_vu1_mem, sizeof run_mem);
                 g_vu1 = before;
+                vuops::g_dispatch_flags = before_pipe;
                 std::memcpy(g_vu1_mem, before_mem, sizeof g_vu1_mem);
-                // The reference is the interpreter loop itself: interpret()
+                // Call the interpreter loop directly: interpret()
                 // would only queue the entry while a chain is running.
                 checking = true;
                 g_reference_dry = true;
+                if (check_all) g_check_packets = &interpreted_packets;
                 run_fast(1, pc);
                 g_reference_dry = false;
                 checking = false;
-                if (escape < 0 && (std::memcmp(&after, &g_vu1, sizeof after) != 0 || std::memcmp(run_mem, g_vu1_mem, sizeof run_mem) != 0)) {
+                g_check_packets = nullptr;
+                const bool comparable = escape < 0;
+                if (escape >= 0) ++escaped;
+                Vu0Regs flag_normalized = g_vu1;
+                flag_normalized.mac = after.mac;
+                flag_normalized.status = after.status;
+                flag_normalized.clip = after.clip;
+                const bool nonflag = std::memcmp(&after, &flag_normalized, sizeof after) != 0 ||
+                    std::memcmp(run_mem, g_vu1_mem, sizeof run_mem) != 0 || compiled_packets != interpreted_packets;
+                if (check_all && comparable && nonflag && ++nonflags == 1) {
+                    // Fixed-size inputs/outputs and bounded packets; only one dump per process.
+                    const auto dump = [](const char *name, const void *data, std::size_t size) {
+                        std::ofstream(name, std::ios::binary).write(static_cast<const char *>(data), size);
+                    };
+                    std::ofstream("vu-first-meta.txt") << pc << " " << g_top << " " << g_itop << " " << escape << "\n";
+                    dump("vu-first-code.bin", g_vu1_code, 16384);
+                    dump("vu-first-before.bin", &before, sizeof before);
+                    dump("vu-first-pipe.bin", &before_pipe, sizeof before_pipe);
+                    dump("vu-first-memory.bin", before_mem, sizeof before_mem);
+                    dump("vu-first-compiled.bin", &after, sizeof after);
+                    dump("vu-first-interpreted.bin", &g_vu1, sizeof g_vu1);
+                    dump("vu-first-compiled-memory.bin", run_mem, sizeof run_mem);
+                    dump("vu-first-interpreted-memory.bin", g_vu1_mem, sizeof run_mem);
+                    dump("vu-first-compiled-packets.bin", compiled_packets.data(), compiled_packets.size());
+                    dump("vu-first-interpreted-packets.bin", interpreted_packets.data(), interpreted_packets.size());
+                    std::fprintf(stderr, "[vu-first] frame %llu key %016llX entry %04X call %llu packets %zu/%zu\n",
+                        static_cast<unsigned long long>(frame_count()), static_cast<unsigned long long>(key), pc,
+                        static_cast<unsigned long long>(checked), compiled_packets.size(), interpreted_packets.size());
+                }
+                if (comparable && (std::memcmp(&after, &g_vu1, sizeof after) != 0 || std::memcmp(run_mem, g_vu1_mem, sizeof run_mem) != 0 || compiled_packets != interpreted_packets)) {
+                    if (check_all && mismatches == 0) {
+                        std::ofstream("vu-flags-code.bin", std::ios::binary).write(reinterpret_cast<const char *>(g_vu1_code), 16384);
+                        std::ofstream("vu-flags-before.bin", std::ios::binary).write(reinterpret_cast<const char *>(&before), sizeof before);
+                        std::ofstream("vu-flags-memory.bin", std::ios::binary).write(reinterpret_cast<const char *>(before_mem), sizeof before_mem);
+                        std::fprintf(stderr, "[vu-first-status] frame %llu mac %X/%X status %X/%X clip %X/%X\n",
+                            (unsigned long long)frame_count(), after.mac, g_vu1.mac, after.status, g_vu1.status, after.clip, g_vu1.clip);
+                    }
                     if (++mismatches <= 20) {
                         int vf = -1;
                         for (int i = 0; i < 32 && vf < 0; ++i)
@@ -914,9 +1019,15 @@ void run_entry(int unit, std::uint32_t pc) {
                     }
                 }
                 ++checked;
-                if (checked == 1 || checked % 100 == 0)
+                if (check_all) { stats.chains = checked; stats.mismatches = mismatches; stats.nonflags = nonflags; }
+                if (!check_all && (checked == 1 || checked % 100 == 0))
                     std::fprintf(stderr, "[vu-check-summary] sampled %llu calls, %llu mismatches\n", static_cast<unsigned long long>(checked), static_cast<unsigned long long>(mismatches));
+                if (check_all && (checked == 1 || checked % 100000 == 0))
+                    std::fprintf(stderr, "[vu-all] compared %llu escaped %llu nonflag %llu frame %llu\n",
+                        (unsigned long long)checked, (unsigned long long)escaped,
+                        (unsigned long long)nonflags, (unsigned long long)frame_count());
                 g_vu1 = after;
+                vuops::g_dispatch_flags = after_pipe;
                 std::memcpy(g_vu1_mem, run_mem, sizeof g_vu1_mem);
                 if (escape >= 0) interpret(1, static_cast<std::uint32_t>(escape));
                 return;
@@ -988,10 +1099,10 @@ void run_fast(int n, std::uint32_t address) {
     Unit u = unit_of(n);
     Vu0Regs &r = *u.regs;
     if (g_scan[n]) scan_flags(n, u.code, u.code_mask + 1);
-    const bool flags = g_flags_used[n];
+    const bool flags = n == 1 || g_flags_used[n];
     Decoded *cache = g_decoded[n];
-    vuops::FlagPipe pipe;
-    pipe.start(r);
+    vuops::FlagFrame frame(r, n == 1);
+    auto &pipe = frame.pipe;
     u.pipe = &pipe;
     std::uint32_t pc = address & u.code_mask, npc = (pc + 8u) & u.code_mask;
     bool ending = false;
@@ -1001,7 +1112,22 @@ void run_fast(int n, std::uint32_t address) {
     static const bool record_jumps = std::getenv("PS2_VU_RECORD") != nullptr || static_cast<bool>(g_options.on_vu_program);
     if (count && ++calls % 20000 == 0) std::fprintf(stderr, "[vu1] %llu calls, %llu instructions\n", (unsigned long long)calls, (unsigned long long)total);
     BranchView view;
+    auto *checkpoint = n == 1 ? g_fast_checkpoint : nullptr;
+    const auto checkpoint_at = [&](std::uint32_t steps, bool complete) {
+        if (!checkpoint) return;
+        checkpoint->steps = steps;
+        checkpoint->pc = pc;
+        checkpoint->npc = npc;
+        checkpoint->complete = complete;
+        checkpoint->ending = ending;
+        checkpoint->branch_live = view.live;
+        std::memcpy(checkpoint->branch_before, view.before, sizeof view.before);
+    };
     for (std::uint32_t steps = 0; steps < 1'000'000; ++steps, ++total) {
+        if (checkpoint && checkpoint->limit && steps == checkpoint->limit) {
+            checkpoint_at(steps, false);
+            return;
+        }
         std::uint32_t lo, hi;
         std::memcpy(&lo, u.code + pc, 4);
         std::memcpy(&hi, u.code + pc + 4, 4);
@@ -1050,10 +1176,12 @@ void run_fast(int n, std::uint32_t address) {
         if (ending) {
             pipe.flush_q(r);
             r.tpc = pc;
+            checkpoint_at(steps + 1, true);
             return;
         }
         if (hi & 0x40000000u) ending = true;
     }
+    checkpoint_at(1'000'000, false);
     std::fprintf(stderr, "[vu%d] program at 0x%04X did not end\n", n, address);
 }
 

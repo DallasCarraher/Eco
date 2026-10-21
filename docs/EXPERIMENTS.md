@@ -1,8 +1,9 @@
 # Deterministic experiment contract
 
-`experiments/jak1-startup.json` is a versioned specification for work item 01,
-not an executable configuration yet. Implement and validate this contract
-before treating it as an overnight job.
+`experiments/jak1-startup.json` is the versioned input to
+`scripts/run_experiments.py`. The runner uses only the Python standard library
+and local subprocesses: it does not build, generate translations, use the
+network, or make model/API calls. Python 3.10+ and a POSIX host are required.
 
 ## Inputs and matrix
 
@@ -103,3 +104,128 @@ zero-exit halt, normal frame limit, missing summary, timeout with child process,
 output quota, cancellation, unavailable GPU, lock contention, resume hash
 mismatch, and paths containing spaces. Use a short synthetic smoke case before
 running the local game pilot.
+
+## Implemented CLI and report details
+
+```sh
+python3 scripts/run_experiments.py \
+  --manifest experiments/jak1-startup.json \
+  --iso "/path/to/Jak.iso" --runner build/native-jak1/ps2run \
+  --elf games/jak1/disc/SCUS_971.24 --generated generated/jak1 \
+  --output local/experiments/my-pilot --pilot
+```
+
+All six paths are required; they resolve absolutely before execution. The output
+must be a new directory under this checkout's ignored `local/experiments/`.
+`--pilot` selects exactly gpu-compiled boot-idle repetitions 1 and 2, then
+cpu-compiled boot-idle repetition 1. Omit it for all 24 cases. Reuse exactly the
+same arguments with `--resume` to continue; do not add/remove `--pilot` when
+resuming. Limits come from the manifest, with positive integer values; changing
+limits changes its hash and requires a new run. No automatic retries occur.
+
+Each attempt gets a new UUID-suffixed directory. A nonexistent `card.ps2` path
+asks the runtime for a fresh, unformatted card. The runtime may create no card
+file if it never flushes a write. The runner's cwd is the attempt directory, so
+incidental relative runtime files are isolated too. The argv uses absolute ELF,
+ISO, capture, misses and card paths. Only the five allowlisted PS2 settings in
+the matrix can be configured; all inherited `PS2_*` values are removed.
+
+Native input semantics were checked in `runtime/src/system.cpp`: vblank
+increments `g_frames`, applies presses with `frame <= g_frames < frame+frames`,
+and updates pad 0 before IOP vblank processing. `runtime/src/iop/sio2.cpp` samples
+that state into active-low pad response bytes. Thus `300:start:2` holds Start
+through guest frames 300 and 301 and releases it at 302. This source inspection
+does not prove that the game polls during the pulse; browser parity is issue #2.
+
+`manifest.json` preserves the exact input bytes. `report.json` contains input
+identities, the case plan, all attempt results, pending case IDs, cumulative
+active batch time, runtime outcomes and comparisons. Each attempt has
+`case.json`, `runtime.log`, `frames/`, and any runtime-created card/misses files.
+`summary.md` avoids raw paths and runtime messages and can be reviewed for
+sharing. Full JSON and logs contain local paths and may contain game data;
+keep them local. The runner never prunes earlier artifacts.
+
+Resume validates the source commit, tracked diff and untracked source hashes,
+runner-script hash, binary, complete generated inventory, ELF, ISO and manifest,
+as well as plan selection, the manifest snapshot, every case report and every
+listed artifact. Source dirty state is recorded, not rejected. Fully written,
+validated terminal reports are sealed, including timeout, halt, unsupported,
+process failure and an `incomplete` runtime result. These are observations,
+not implicit retries. Cancelled attempts remain unsealed and get a fresh
+attempt directory on resume; partial directories lacking a report are retained
+but never reused. A crash between writing `case.json` and the run report can
+leave an orphan attempt; it is retained and the case remains pending.
+
+Locks under `local/experiments/.locks/` use POSIX flock and canonical resource
+paths for the output, native build directory and generated directory. Locks
+release on process exit; lock files may remain. All instances of this runner
+in this checkout cooperate. Build/probe tools do not acquire these locks:
+keep the checkout/build frozen and do not run those writers during measurement.
+Fingerprints identify files present at preflight; an older already-built binary
+is not thereby attested to have been compiled from the recorded source commit.
+The report includes the local CMake cache hash and available toolchain versions.
+
+An adapter line plus GPU submit statistics proves active WebGPU. An explicit
+software-fallback line records CPU. A requested GPU/mirror case with no positive
+GPU evidence is unsupported once an otherwise valid runtime summary is seen.
+A CPU case is identified from its explicit setting, whose dispatch was checked
+in native source; the runtime has no CPU-init banner. Hardware adapter text is
+preserved when available. Exit failure, timeout and malformed summaries retain
+their own categories even if GPU evidence is unavailable. A valid stop requires
+one stop summary and a matching halt line; frame-limit stops must match the
+requested count. Completion classification is separate from capture coverage.
+
+VU counters are **last observed**, not final totals: the runtime prints sampled
+counts periodically, shares a sampling counter with other checks and does not
+report escaping/skipped totals. Final checked, skipped and eligible counts stay
+unknown. GS mirror lines preserve the runtime's count of pixels over delta 2;
+this existing diagnostic threshold is not an acceptance tolerance. Cross-case
+PPM comparisons use exact SHA-256 equality and zero-tolerance RGB metrics.
+They report differing pixel count, maximum channel delta, first unequal capture,
+unpaired captures, expected-but-missing captures and runtime-outcome equality.
+A reliable full comparison requires frame-limit completion, complete captures
+and valid matching image dimensions. `repeatable` additionally requires identical
+frame hashes and runtime outcomes on repeated cases. Cross-variant reports
+record whether repeatability is established for both variants (unknown when
+a pilot includes only one CPU case); complete capture coverage alone does not
+establish repeatability or a reliable causal attribution. Comparing early-halt captures remains
+useful but is explicitly partial. Agreement never establishes PS2 correctness.
+
+The monitor checks elapsed time, aggregate run bytes and free disk every poll
+(50 ms plus filesystem scan time). Captures and other native direct writes may
+overshoot the byte/disk thresholds between polls; streamed logs are capped at
+the remaining byte allowance. Small reports are still written after a quota
+stop to preserve evidence. Reserve additional free space for this overhead.
+Parsing is bounded to the first 1 MiB and last 7 MiB of logs over 8 MiB; omitted
+middle diagnostics are explicitly flagged. Complete logs remain on disk.
+Total time is cumulative active batch time across resume, excluding preflight
+hashing, validation and time while the runner is stopped. ISO hashing occurs
+once per invocation at preflight. A total-budget timeout leaves later cases
+pending. A depleted cumulative budget cannot be extended via resume.
+
+TERM goes to the entire process group, followed by KILL after a one-second
+grace period even if its leader has exited; the leader is always waited for.
+Linux uses a child subreaper and waits for adopted group descendants. macOS
+reparents orphan descendants to launchd for reaping; tests verify none remain
+running. Processes intentionally escaping the session/group are outside this
+cooperative native-runtime contract. SIGINT/SIGTERM preserve a cancellation
+report. SIGKILL/power loss cannot run cleanup; atomic completed reports survive,
+but inspect for surviving processes before resuming after such a failure.
+
+Exit status 0 means a bounded batch report was produced, even if game cases
+failed. Cancellation returns 130; invalid inputs, identity/lock failures and
+preflight errors return 2. Read `state`, `pending` and case statuses in the
+report to assess results. No visual or gameplay success exit code is offered.
+
+Synthetic regression suite:
+
+```sh
+python3 -m unittest discover -s scripts -p test_run_experiments.py -v
+```
+
+For issue 4, the separate [bounded VU diagnostic](ISSUE4-VU.md) adds opt-in
+`PS2_VU_CHECK=all` complete-chain comparison and final chain counters, distinct
+from the legacy sampled observations above. The three-case
+`experiments/jak1-vu-issue4.json` manifest stops at 510 frames. This mode is
+instrumentation, not an acceptance oracle or a replacement for the startup
+matrix.
