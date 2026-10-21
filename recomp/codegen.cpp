@@ -183,7 +183,8 @@ private:
         }
 
         out_.str({});
-        out_ << "#include \"units.hpp\"\n\nnamespace gen {\n\nusing namespace ps2;\n\n";
+        out_ << "#include \"" << (prefix_.empty() ? "main_units.hpp" : prefix_ + "units.hpp")
+             << "\"\n\nnamespace gen {\n\nusing namespace ps2;\n\n";
         out_ << "const std::uint16_t " << table_name(u) << "[" << (layout_.size() / 4) << "] = {";
         std::vector<std::uint16_t> dense(layout_.size() / 4, 0);
         for (const auto &[a, id] : ids_[u]) dense[(a - base_) >> 2] = id;
@@ -795,12 +796,21 @@ void generate(const std::vector<Translation> &translations, const CodegenOptions
     std::vector<std::string> unit_names;
     for (const Translation &t : translations) {
         const std::vector<UnitRow> rows = Generator(t, options).run();
+        // A new heap snapshot changes the aggregate table, but should not
+        // force every already-translated unit to compile again. Units only
+        // call functions in their own translation; other modules use dispatch.
+        std::ostringstream local_header;
+        local_header << "#pragma once\n\n#include \"ps2/generated.hpp\"\n\nnamespace gen {\n";
         written += rows.size();
         for (const UnitRow &r : rows) {
             unit_names.push_back(r.function);
             header << "void " << r.function << "(ps2::Cpu &c, std::uint32_t entry, std::uint32_t depth);\n";
             header << "extern const std::uint16_t " << r.table << "[];\n";
+            local_header << "void " << r.function << "(ps2::Cpu &c, std::uint32_t entry, std::uint32_t depth);\n";
+            local_header << "extern const std::uint16_t " << r.table << "[];\n";
         }
+        local_header << "}\n";
+        write_if_changed(fs::path(options.output) / (t.prefix.empty() ? "main_units.hpp" : t.prefix + "units.hpp"), local_header.str());
         table << "const ps2::UnitInfo " << (t.relocatable || t.fixed_module ? t.prefix + "units" : "kUnits") << "[] = {\n";
         for (const UnitRow &r : rows)
             table << std::format("    {{{}, {}u, &{}, {}}},\n", hex(t.fixed_module ? r.base - t.fixed_base : r.base), r.size, r.function, r.table);

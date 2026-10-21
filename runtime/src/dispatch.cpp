@@ -59,20 +59,32 @@ Instance make_instance(std::uint32_t base, const ModuleInfo *m) {
     return {base, m};
 }
 
-const Instance *instance_for(std::uint32_t pc) {
-    for (std::size_t k = 0; k < g_instances.size(); ++k) {
+bool answers(const ModuleInfo &m, std::uint32_t offset) {
+    for (std::uint32_t k = 0; k < m.count; ++k) {
+        const UnitInfo &u = m.units[k];
+        if (offset - u.base < u.size && u.entries[(offset - u.base) >> 2]) return true;
+    }
+    return false;
+}
+
+const Instance *instance_for(std::uint32_t pc, bool require_entry = false) {
+    for (std::size_t k = 0; k < g_instances.size();) {
         const Instance &i = g_instances[k];
-        if (pc - i.base >= i.module->size) continue;
-        if (in_place(i)) return &i;
+        if (pc - i.base >= i.module->size) { ++k; continue; }
+        if (in_place(i)) {
+            if (!require_entry || answers(*i.module, pc - i.base)) return &i;
+            ++k;
+            continue;
+        }
         g_instances.erase(g_instances.begin() + static_cast<std::ptrdiff_t>(k));
-        break;
     }
     if (!g_module_count || pc >= kRamSize) return nullptr;
     // A code window rewritten by the game holds fixed base modules, each an
     // image of one content. The one whose check words are in place serves it.
     for (std::uint32_t k = 0; k < g_module_count; ++k) {
         const ModuleInfo &m = g_modules[k];
-        if (m.fixed_base && pc - m.fixed_base < m.size && loaded_at(m, m.fixed_base)) {
+        if (m.fixed_base && pc - m.fixed_base < m.size &&
+            (!require_entry || answers(m, pc - m.fixed_base)) && loaded_at(m, m.fixed_base)) {
             g_instances.push_back(make_instance(m.fixed_base, &m));
             return &g_instances.back();
         }
@@ -80,7 +92,8 @@ const Instance *instance_for(std::uint32_t pc) {
     for (std::uint32_t at = pc & ~15u; pc - at < g_module_span; at -= 16) {
         if (ld32(at) == kModuleMagic) {
             for (std::uint32_t k = 0; k < g_module_count; ++k)
-                if (pc - at < g_modules[k].size && loaded_at(g_modules[k], at)) {
+                if (pc - at < g_modules[k].size &&
+                    (!require_entry || answers(g_modules[k], pc - at)) && loaded_at(g_modules[k], at)) {
                     g_instances.push_back(make_instance(at, &g_modules[k]));
                     return &g_instances.back();
                 }
@@ -138,7 +151,7 @@ void register_modules(const ModuleInfo *modules, std::uint32_t count) {
 bool has_code(std::uint32_t pc) {
     const UnitInfo *u = unit_for(pc);
     if (u && u->entries[(pc - u->base) >> 2] != 0) return true;
-    const Instance *m = instance_for(pc);
+    const Instance *m = instance_for(pc, true);
     const UnitInfo *mu = m ? module_unit(*m->module, pc - m->base) : nullptr;
     return mu && mu->entries[(pc - m->base - mu->base) >> 2] != 0;
 }
@@ -150,7 +163,7 @@ void dispatch(Cpu &c, std::uint32_t, std::uint32_t depth) {
     const UnitInfo *u = unit_for(pc);
     const std::uint16_t id = u ? u->entries[(pc - u->base) >> 2] : 0;
     if (!id) {
-        if (const Instance *m = instance_for(pc)) {
+        if (const Instance *m = instance_for(pc, true)) {
             const std::uint32_t base = m->base;
             const UnitInfo *mu = module_unit(*m->module, pc - base);
             const std::uint16_t entry = mu ? mu->entries[(pc - base - mu->base) >> 2] : 0;

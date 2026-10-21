@@ -3,11 +3,15 @@
 An experimental effort to run **Jak and Daxter: The Precursor Legacy** in a
 browser using WebAssembly and WebGPU.
 
-**Status: toolchain verified; Jak compatibility has not been tested.** A small,
+**Status: experimental Jak boot; no playable scene verified.** The supplied
+USA Rev 1 disc boots through driver loading and into GOAL object initialization
+in the native runner. Heap snapshot support is being developed to translate
+the code that GOAL loads and relocates during startup. A small,
 original MIPS test program has been translated to C++, compiled for native
 Apple Silicon and WASM, and executed successfully in headless Chrome with
 WebGPU available. It does not draw a scene or establish gameplay compatibility.
-The next step is testing a local Jak 1 disc image.
+The original test program also runs in Chrome; Jak's browser behavior is a
+separate milestone.
 
 Eco builds on [PS2 Web Recomp](https://github.com/snuri00/ps2-web-recomp) by
 snuri00, starting at commit `6526f4803d98e10de50bea3af104a4d26e9df033`.
@@ -45,6 +49,19 @@ rather than copying it, explores for 600 frames per round (up to two rounds),
 and stops the process tree after 15 minutes. Results go in `games/jak1/`.
 Use `--timeout SECONDS` to change the limit, or `--web` to include the WASM build.
 
+The first baseline probe stops when Jak calls heap-loaded GOAL code. Eco's
+experimental path captures missed pages, checks their instruction words, and
+uses Jak 1's reciprocal type/symbol metadata to seed linked functions in batches:
+
+```sh
+python3 scripts/jak_probe.py "/path/to/Jak and Daxter.iso" --run --goal-functions --rounds 100
+```
+
+This is a fixed-address snapshot experiment, not a complete relocatable GOAL
+loader. Code pages can change during linking; the probe sets
+`PS2_WINDOW_FULL=1` to require full instruction matching. `--capture-heap`
+captures only observed misses without discovering additional tagged functions.
+
 **A completed build is not proof that the game works.** Check `probe.json`,
 `pipeline.log`, `explore.log`, and captured frames. The runtime can halt while
 the upstream pipeline still exits successfully.
@@ -55,7 +72,8 @@ Once a browser build exists:
 python3 scripts/serve.py build/web-jak1 games/jak1/disc.iso
 ```
 
-Open `http://127.0.0.1:8620/` in current Chrome or Edge. The local server supplies
+Open `http://127.0.0.1:8620/?PS2_WINDOW_FULL=1` in current Chrome or Edge for
+heap experiments. The local server supplies
 the isolation headers required for WASM threads and supports disc range reads.
 
 ## Verify the toolchain without game data
@@ -82,9 +100,20 @@ WASM; it does not test rendering, sound, controls, or Jak gameplay.
 
 Jak loads GOAL objects from CGO/DGO archives and relocates code into its heap.
 The inherited engine handles boot ELFs, SNR2 modules, and certain fixed code
-windows; these mechanisms do not establish support for GOAL objects. A disc
-probe will identify the actual blocker before we choose between extending this
-runtime and developing an OpenGOAL WASM path.
+windows. Eco adds observed heap snapshots and fixes dispatch selection when
+multiple snapshots match a page but offer different entry points. Supporting
+the full game still requires addressing every code-loading path, graphics,
+audio, controls and saves, then verifying browser gameplay.
+
+## Regression checks
+
+```sh
+python3 -m unittest discover -s scripts -p test_heap_windows.py -v
+cmake --build build/tools --target dispatch_snapshot_test
+build/tools/dispatch_snapshot_test
+```
+
+These tests use synthetic memory and original test code, with no disc required.
 
 Eco is unofficial and not affiliated with Sony or Naughty Dog. Do not commit or
 publish disc images, extracted assets, or generated translations of game code.

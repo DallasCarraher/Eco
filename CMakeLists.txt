@@ -26,6 +26,9 @@ if(NOT EMSCRIPTEN)
     add_executable(vurecomp recomp/vurecomp.cpp)
     target_include_directories(vurecomp PRIVATE runtime/include)
     target_compile_options(vurecomp PRIVATE -Wall -Wextra)
+
+    add_executable(dispatch_snapshot_test scripts/test_dispatch_snapshots.cpp runtime/src/dispatch.cpp)
+    target_include_directories(dispatch_snapshot_test PRIVATE runtime/include)
 endif()
 
 add_library(ps2runtime STATIC

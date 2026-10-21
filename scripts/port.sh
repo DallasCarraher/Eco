@@ -20,6 +20,9 @@ options:
   --rounds N         exploring runs at most (default 8)
   --no-explore       translate and build without running the game
   --native-only      skip the browser build and the Emscripten SDK it needs
+  --capture-heap     experimental: translate observed missed code pages outside
+                     the boot ELF from halted RAM snapshots (fixed addresses)
+  --goal-functions   also seed linked Jak 1 function objects from type metadata
   --pnach FILE       apply a PCSX2 patch file, repeatable; patches that land in
                      the executable are translated with it, the rest are
                      written into memory at boot or every frame
@@ -31,7 +34,7 @@ EOF
 
 [ $# -ge 2 ] || { usage; exit 2; }
 name="$1"; source_path="$2"; shift 2
-frames=3600; rounds=8; explore=1; web=1; presses=(); pnach=()
+frames=3600; rounds=8; explore=1; web=1; heap=0; goal=(); presses=(); pnach=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --frames) frames="$2"; shift ;;
@@ -39,6 +42,8 @@ while [ $# -gt 0 ]; do
     --rounds) rounds="$2"; shift ;;
     --no-explore) explore=0 ;;
     --native-only) web=0 ;;
+    --capture-heap) heap=1 ;;
+    --goal-functions) heap=1; goal=(--goal-functions) ;;
     --pnach) pnach+=("$(realpath "$2")"); shift ;;
     --pnach-section) pnach=(--section "$2" "${pnach[@]}"); shift ;;
     -h|--help) usage; exit 0 ;;
@@ -118,6 +123,10 @@ if windows=$(python3 -I "$here/windows.py" list "$elf") && [ -n "$windows" ]; th
   overlays=(--overlays "$game/overlays")
   echo "code windows the game rewrites: $(echo "$windows" | tr '\n' ' ')"
 fi
+if [ "$heap" = 1 ]; then
+  mkdir -p "$game/overlays"
+  overlays=(--overlays "$game/overlays")
+fi
 
 translate() { "$tools/eerecomp" "$elf" --entries "$game/entries.txt" "${modules[@]}" "${overlays[@]}" --out "$generated" | tail -1; }
 
@@ -143,6 +152,13 @@ if [ "$explore" = 1 ]; then
     captured=0
     if [ ${#overlays[@]} -gt 0 ] && [ -f "$game/explore_ram.bin" ]; then
       captured=$(python3 -I "$here/windows.py" capture "$elf" "$game/explore_ram.bin" "$game/overlays" "$game/misses.txt" | grep -c '^captured' || true)
+      if [ "$heap" = 1 ]; then
+        # Isolated Python excludes the script directory from sys.path. The
+        # helper imports windows.py, so execute it normally like a local tool.
+        heap_report=$(python3 "$here/heap_windows.py" "$elf" "$game/explore_ram.bin" "$game/overlays" "$game/misses.txt" "${goal[@]}")
+        heap_captured=$(printf '%s\n' "$heap_report" | grep -c '^captured' || true)
+        captured=$((captured + heap_captured))
+      fi
     fi
     reason=$(sed -n 's/^\[ee\] halted: //p' "$game/explore.log" | head -1)
     added=$(python3 -I - "$game/entries.txt" "$game/misses.txt" <<'EOF'
