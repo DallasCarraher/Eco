@@ -1819,10 +1819,12 @@ void Translator::prologue() {
         c_.load(kOffT);
         c_.set(kT);
     }
-    // Retain the existing Q flush-at-dispatch policy.
-    fl();
-    c_.i32c(0);
-    c_.store8(kOffQPending);
+    // Persistent storage belongs to the invocation, including pending Q.
+    if (!layout_.persistent_flags) {
+        fl();
+        c_.i32c(0);
+        c_.store8(kOffQPending);
+    }
     for (unsigned i = 1; i < 16; ++i) {
         if (!(vi_used_ & (1u << i))) continue;
         c_.get(kR);

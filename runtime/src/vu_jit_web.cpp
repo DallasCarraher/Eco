@@ -86,7 +86,7 @@ EMSCRIPTEN_KEEPALIVE void ps2jit_kick(std::uint32_t address) {
 EMSCRIPTEN_KEEPALIVE std::uint32_t ps2jit_top() { return vu::top(); }
 EMSCRIPTEN_KEEPALIVE std::uint32_t ps2jit_itop() { return vu::itop(); }
 EMSCRIPTEN_KEEPALIVE void ps2jit_interpret(Vu0Regs *r, std::uint32_t pc) {
-    vuops::g_dispatch_flags.flush_q(*r);
+    if (!vuops::g_dispatch_flags_active) vuops::g_dispatch_flags.flush_q(*r);
     if (vu::jit::g_dry) {
         vu::jit::g_escape = pc;
         return;
