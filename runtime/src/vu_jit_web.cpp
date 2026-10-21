@@ -32,16 +32,6 @@ int mode() {
 
 #ifdef __EMSCRIPTEN__
 
-namespace {
-
-struct State {
-    vuops::FlagPipe fl;
-};
-
-State g_state;
-
-}
-
 EM_JS_DEPS(ps2jit, "$addFunction");
 
 EM_JS(int, ps2jit_instantiate, (const std::uint8_t *bytes, int size), {
@@ -60,7 +50,7 @@ EM_JS(int, ps2jit_instantiate, (const std::uint8_t *bytes, int size), {
 
 ProgramFn compile(const std::uint8_t *code, std::uint32_t entry) {
     std::vector<std::uint8_t> bytes;
-    const Layout layout{static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&g_state.fl))};
+    const Layout layout{static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&vuops::g_dispatch_flags)), true};
     if (!translate(code, entry, layout, bytes)) return nullptr;
     const int index = ps2jit_instantiate(bytes.data(), static_cast<int>(bytes.size()));
     if (!index) return nullptr;
@@ -96,7 +86,7 @@ EMSCRIPTEN_KEEPALIVE void ps2jit_kick(std::uint32_t address) {
 EMSCRIPTEN_KEEPALIVE std::uint32_t ps2jit_top() { return vu::top(); }
 EMSCRIPTEN_KEEPALIVE std::uint32_t ps2jit_itop() { return vu::itop(); }
 EMSCRIPTEN_KEEPALIVE void ps2jit_interpret(Vu0Regs *r, std::uint32_t pc) {
-    vu::jit::g_state.fl.flush_q(*r);
+    vuops::g_dispatch_flags.flush_q(*r);
     if (vu::jit::g_dry) {
         vu::jit::g_escape = pc;
         return;

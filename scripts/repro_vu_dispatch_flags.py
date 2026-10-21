@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Original issue-4 reproducer. Exit 1 means the known native/Wasm bug persists.
+"""Original issue-4 dispatch flags regression. Failed assertions exit nonzero.
 
-Requires CMake, a C++20 compiler with std::format, and Node with Wasm tail calls.
-No game data. All builds/output are private temporary directories.
-Expected FSAND results are (0, 2): the negative SUB's status becomes visible
-four issue cycles later, across a register jump. See docs/ISSUE4-VU.md.
+Requires CMake, C++20 clang++ with std::format, and Node with Wasm tail calls.
+No game data. Private temporary builds. Checks delayed flags across compiled
+and fallback dispatch, fresh invocations, reset and VU0 isolation. Expected
+FSAND reads stay (0, 2); see docs/ISSUE4-VU.md for their original derivation.
 """
-import argparse
+import os
 import pathlib
 import subprocess
 import tempfile
@@ -21,30 +21,38 @@ GENERATOR = r'''
 #include <cstddef>
 int main(int argc, char **argv) {
     fs::path out=argv[1];
-    Program p{0x10001,0,std::vector<std::uint8_t>(16384)};
-    const auto put=[&](unsigned pc, unsigned lo, unsigned hi=0x2FF) {
-        std::memcpy(p.code.data()+pc,&lo,4); std::memcpy(p.code.data()+pc+4,&hi,4);
-    };
-    const unsigned nop=0x8000033C;
-    // JR vi9; its delay slot computes SUB.x vf3, vf1, vf2 (1 - 2).
-    put(0,(0x24u<<25)|(9u<<11));
-    put(8,nop,(8u<<21)|(2u<<16)|(1u<<11)|(3u<<6)|0x2Cu);
-    put(0x80,nop); put(0x88,nop);
-    put(0x90,(0x16u<<25)|(1u<<16)|2u);
-    put(0x98,(0x16u<<25)|(2u<<16)|2u,0x400002FF);
-    put(0xA0,nop);
-    std::ofstream(out/"code.bin",std::ios::binary).write((char*)p.code.data(),p.code.size());
     std::ofstream native(out/"native.cpp");
     native << "#include \"ps2/vu_ops.hpp\"\nusing namespace ps2; using namespace ps2::vuops;\n";
-    for(int i=0;i<2;++i) {
-        p.key=0x10001+i; p.entry=i?0x80:0;
-        std::string name; native << generate(p,name);
-        std::vector<std::uint8_t> wasm;
-        if(!ps2::vu::jit::translate(p.code.data(),p.entry,{0x1000},wasm)) return 2;
-        std::ofstream(out/std::format("{}.wasm",i),std::ios::binary).write((char*)wasm.data(),wasm.size());
+    for(int kind=0;kind<3;++kind) {
+        Program p{0x10001,0,std::vector<std::uint8_t>(16384)};
+        const auto put=[&](unsigned pc,unsigned lo,unsigned hi=0x2FF) {
+            std::memcpy(p.code.data()+pc,&lo,4);std::memcpy(p.code.data()+pc+4,&hi,4);
+        };
+        const unsigned nop=0x8000033C;
+        put(0,(0x24u<<25)|(9u<<11));
+        if(kind<2) {
+            // SUB.x 1 - 2 in the jump delay slot; status/MAC latency is four.
+            put(8,nop,(8u<<21)|(2u<<16)|(1u<<11)|(3u<<6)|0x2Cu);
+            put(0x80,nop);put(0x88,nop);
+            const auto read=[&](unsigned it) {return kind==0?(0x16u<<25)|(it<<16)|2u:(0x1Au<<25)|(7u<<11)|(it<<16);};
+            put(0x90,read(1));put(0x98,read(2),0x400002FF);put(0xA0,nop);
+        } else {
+            // CLIP sees x=1 > |w=0|. Its three-cycle history also crosses JR.
+            put(8,nop,(2u<<16)|(1u<<11)|(7u<<6)|0x3Fu);
+            put(0x80,nop);put(0x88,(0x1Cu<<25)|(1u<<16));
+            put(0x90,(0x1Cu<<25)|(2u<<16),0x400002FF);put(0x98,nop);
+        }
+        std::ofstream(out/std::format("code{}.bin",kind),std::ios::binary).write((char*)p.code.data(),p.code.size());
+        for(int part=0;part<2;++part) {
+            p.key=0x10001+kind*2+part;p.entry=part?0x80:0;
+            std::string name;native<<generate(p,name);
+            std::vector<std::uint8_t> wasm;
+            if(!ps2::vu::jit::translate(p.code.data(),p.entry,{0x1000,true},wasm)) return 2;
+            std::ofstream(out/std::format("{}-{}.wasm",kind,part),std::ios::binary).write((char*)wasm.data(),wasm.size());
+        }
     }
-    std::ofstream(out/"offsets.json") << std::format("{{\"vi\":{},\"vf\":{}}}",offsetof(ps2::Vu0Regs,vi),offsetof(ps2::Vu0Regs,vf));
-    std::ofstream(out/"pipe.json") << std::format("{{\"t\":{},\"mh\":{},\"ts\":{},\"status\":{}}}",offsetof(ps2::vuops::FlagPipe,t),offsetof(ps2::vuops::FlagPipe,mh),offsetof(ps2::vuops::FlagPipe,mac_ts),offsetof(ps2::vuops::FlagPipe,status_v));
+    std::ofstream(out/"offsets.json") << std::format("{{\"vi\":{},\"vf\":{},\"rawStatus\":{},\"rawMac\":{},\"rawClip\":{},\"size\":{}}}",offsetof(ps2::Vu0Regs,vi),offsetof(ps2::Vu0Regs,vf),offsetof(ps2::Vu0Regs,status),offsetof(ps2::Vu0Regs,mac),offsetof(ps2::Vu0Regs,clip),sizeof(ps2::Vu0Regs));
+    std::ofstream(out/"pipe.json") << std::format("{{\"t\":{},\"mh\":{},\"ts\":{},\"status\":{},\"mac\":{},\"ch\":{},\"clipTs\":{},\"clip\":{},\"size\":{}}}",offsetof(ps2::vuops::FlagPipe,t),offsetof(ps2::vuops::FlagPipe,mh),offsetof(ps2::vuops::FlagPipe,mac_ts),offsetof(ps2::vuops::FlagPipe,status_v),offsetof(ps2::vuops::FlagPipe,mac_v),offsetof(ps2::vuops::FlagPipe,ch),offsetof(ps2::vuops::FlagPipe,clip_ts),offsetof(ps2::vuops::FlagPipe,clip_v),sizeof(ps2::vuops::FlagPipe));
 }
 '''
 DRIVER = r'''
@@ -52,20 +60,48 @@ DRIVER = r'''
 #include <iostream>
 void vu1_0000000000010001(ps2::Vu0Regs&,std::uint8_t*);
 void vu1_0000000000010002(ps2::Vu0Regs&,std::uint8_t*);
+void vu1_0000000000010003(ps2::Vu0Regs&,std::uint8_t*);
+void vu1_0000000000010004(ps2::Vu0Regs&,std::uint8_t*);
+void vu1_0000000000010005(ps2::Vu0Regs&,std::uint8_t*);
+void vu1_0000000000010006(ps2::Vu0Regs&,std::uint8_t*);
 int main(int argc,char **argv) {
  using namespace ps2;
- std::ifstream(argv[1],std::ios::binary).read((char*)g_vu1_code,16384);
- auto init=[] {vu::reset(); std::memset(g_vu1_mem,0,16384);auto &r=vu::regs(1);r.vi[9]=0x10;r.vf[1].w[0]=0x3F800000;r.vf[2].w[0]=0x40000000;};
+ if(argc!=4 || !std::ifstream(argv[1],std::ios::binary).read((char*)g_vu1_code,16384)) return 2;
+ const unsigned kind=std::stoul(argv[3]),expected=kind==0?2:kind==1?128:1;
+ if(kind>2) return 2;
+ vu::ProgramFn producers[]={vu1_0000000000010001,vu1_0000000000010003,vu1_0000000000010005};
+ vu::ProgramFn consumers[]={vu1_0000000000010002,vu1_0000000000010004,vu1_0000000000010006};
+ auto init=[] {vu::reset(); std::memset(g_vu1_mem,0,16384);auto &r=vu::regs(1);r.vi[7]=0x80;r.vi[9]=0x10;r.vf[1].w[0]=0x3F800000;r.vf[2].w[0]=0x40000000;};
+ auto expect=[](const char *name,unsigned a,unsigned b) {
+  auto &r=vu::regs(1);
+  if(r.vi[1]!=a||r.vi[2]!=b) {std::cerr<<name<<": "<<r.vi[1]<<","<<r.vi[2]<<" expected "<<a<<","<<b<<"\n";return false;}
+  return true;
+ };
  init();vu::code_changed(1);vu::run_fast(1,0);
- auto &r=vu::regs(1);
- std::cout<<"continuous interpreter: "<<r.vi[1]<<","<<r.vi[2]<<" (expected 0,2)\n";
- bool ok=r.vi[1]==0&&r.vi[2]==2;
- init(); std::int64_t escape=-1;vu::g_capture=&escape;
- vu1_0000000000010001(r,g_vu1_mem);vu::g_capture=nullptr;
- if(escape!=0x80) return 2;
- vu1_0000000000010002(r,g_vu1_mem);
- std::cout<<"native dispatch: "<<r.vi[1]<<","<<r.vi[2]<<" (expected 0,2)\n";
- return ok&&r.vi[1]==0&&r.vi[2]==2?0:1;
+ if(!expect("continuous interpreter",0,expected)) return 1;
+ const auto key=[](unsigned pc) {return vu::program_key(g_vu1_code,vu::reachable(g_vu1_code,16383,pc),pc);};
+ vu::Program programs[]={{key(0),producers[kind]},{key(0x80),consumers[kind]}};
+ const bool fallback=std::string(argv[2])=="fallback";
+ vu::register_programs(programs,fallback?1:2);
+ // Enough invocations to exercise legacy sampling as well as complete-chain checks.
+ for(unsigned repeat=0;repeat<128;++repeat) {
+  init();vu::run(1,0);
+  if(!expect("dispatch chain",0,expected)) return 1;
+ }
+ // A new microprogram seeds history from committed raw flags. It must not
+ // inherit delayed timestamps from the preceding logical invocation.
+ vu::run(1,0x80);if(!expect("next invocation",expected,expected)) return 1;
+ init();vu::run(1,0x80);if(!expect("reset invocation",0,0)) return 1;
+ // VU0 must not mutate an active VU1 history on the same host thread.
+ {
+  vuops::FlagDispatch scope(vu::regs(1));
+  const auto saved=vuops::g_dispatch_flags;
+  std::memcpy(g_vu0_code,g_vu1_code,4096);vu::code_changed(0);
+  vu::run_fast(0,0x80);
+  if(std::memcmp(&saved,&vuops::g_dispatch_flags,sizeof saved)) return 1;
+ }
+ std::cout<<(fallback?"compiled -> interpreter":"compiled -> compiled")
+          <<" flag kind "<<kind<<": 128 delayed reads, fresh invocation, reset, VU0 isolation passed\n";
 }
 '''
 WASM = r'''
@@ -73,30 +109,55 @@ const fs=require('node:fs'),path=require('node:path');const dir=process.argv[2];
 const pipe=JSON.parse(fs.readFileSync(path.join(dir,'pipe.json')));
 const off=JSON.parse(fs.readFileSync(path.join(dir,'offsets.json')));
 const memory=new WebAssembly.Memory({initial:1,maximum:65536,shared:true});
-const v=new DataView(memory.buffer),r=0x3000;let escape=-1;
-v.setUint16(r+off.vi+18,0x10,true);
-v.setUint32(r+off.vf+12,0x3F800000,true);
-v.setUint32(r+off.vf+16,0x3F800000,true);v.setUint32(r+off.vf+32,0x40000000,true);
+const v=new DataView(memory.buffer),r=0x3000,fl=0x1000;let escape=-1;
+function resetPipe(){
+ new Uint8Array(memory.buffer,fl,pipe.size).fill(0);
+ v.setUint32(fl+pipe.t,16,true);
+ for(const [raw,ring] of [[off.rawStatus,pipe.status],[off.rawMac,pipe.mac],[off.rawClip,pipe.clip]])
+  for(let i=0;i<8;++i)v.setUint32(fl+ring+4*i,v.getUint32(r+raw,true),true);
+}
+function init(){
+ new Uint8Array(memory.buffer,r,off.size).fill(0);
+ v.setUint16(r+off.vi+18,0x10,true);v.setUint16(r+off.vi+14,0x80,true);
+ v.setUint32(r+off.vf+12,0x3F800000,true);
+ v.setUint32(r+off.vf+16,0x3F800000,true);v.setUint32(r+off.vf+32,0x40000000,true);
+ resetPipe();
+}
+for(let kind=0;kind<3;++kind){
+const expected=kind===0?2:kind===1?128:1;
+const runs=[];
 for(let i=0;i<2;++i){
- const mod=new WebAssembly.Module(fs.readFileSync(path.join(dir,`${i}.wasm`)));
+ const mod=new WebAssembly.Module(fs.readFileSync(path.join(dir,`${kind}-${i}.wasm`)));
  const env={memory};for(const imp of WebAssembly.Module.imports(mod)){
   if(imp.kind!=='function')continue;
   env[imp.name]=()=>{throw Error(`unexpected import ${imp.name}`)};
  }
- // The JIT's dispatch helper reports the next micro PC.
  env.interpret=(unit,pc)=>{escape=pc;};
- env.status=(fl)=>{
-  const t=v.getUint32(fl+pipe.t,true),mh=v.getUint32(fl+pipe.mh,true);
-  for(let k=1;k<=8;++k){const i=(mh-k)&7;
-   if(v.getUint32(fl+pipe.ts+4*i,true)+4<=t)return v.getUint32(fl+pipe.status+4*i,true);
+ const read=(fl,head,ts,ring,latency)=>{
+  const t=v.getUint32(fl+pipe.t,true),h=v.getUint32(fl+head,true);
+  for(let k=1;k<=8;++k){const i=(h-k)&7;
+   if(v.getUint32(fl+ts+4*i,true)+latency<=t)return v.getUint32(fl+ring+4*i,true);
   }
-  return v.getUint32(fl+pipe.status+4*((mh-8)&7),true);
+  return v.getUint32(fl+ring+4*((h-8)&7),true);
  };
- const inst=new WebAssembly.Instance(mod,{env});inst.exports.run(r,0x4000);
- if(i===0 && escape!==0x80)throw Error(`unexpected dispatch ${escape}`);
+ env.status=fl=>read(fl,pipe.mh,pipe.ts,pipe.status,4);
+ env.mac=fl=>read(fl,pipe.mh,pipe.ts,pipe.mac,4);
+ env.clip=fl=>read(fl,pipe.ch,pipe.clipTs,pipe.clip,3);
+ runs.push(new WebAssembly.Instance(mod,{env}).exports.run);
 }
-const a=v.getUint16(r+off.vi+2,true),b=v.getUint16(r+off.vi+4,true);
-console.log(`Wasm dispatch: ${a},${b} (expected 0,2)`);process.exit(a===0&&b===2?0:1);
+function expect(name,a,b){
+ const x=v.getUint16(r+off.vi+2,true),y=v.getUint16(r+off.vi+4,true);
+ if(x!==a||y!==b)throw Error(`${name}: ${x},${y} expected ${a},${b}`);
+}
+for(let repeat=0;repeat<128;++repeat){
+ init();escape=-1;runs[0](r,0x4000);
+ if(escape!==0x80)throw Error(`unexpected dispatch ${escape}`);
+ runs[1](r,0x4000);expect('dispatch',0,expected);
+}
+resetPipe();runs[1](r,0x4000);expect('next invocation',expected,expected);
+init();runs[1](r,0x4000);expect('reset invocation',0,0);
+console.log(`Wasm flag kind ${kind}: 128 delayed reads, fresh invocation, reset passed`);
+}
 '''
 
 def run(*args):
@@ -104,34 +165,26 @@ def run(*args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--force-native-flags', action='store_true',
-                        help='diagnostic intervention: force native flag writes, retaining the same expected reads')
-    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='eco-vu-dispatch-') as directory:
-        d=pathlib.Path(directory)
-        generator = GENERATOR
-        if args.force_native_flags:
-            source = (ROOT/'recomp/vurecomp.cpp').read_text()
-            old = 'upper(hi, any_status ? true : (any_flags && out_live))'
-            if source.count(old) != 1:
-                raise RuntimeError('producer intervention no longer matches code generator')
-            (d/'forced.cpp').write_text(source.replace(old, 'upper(hi, true)'))
-            generator = generator.replace('#include "recomp/vurecomp.cpp"',
-                                          '#include "'+str(d/'forced.cpp')+'"')
-        (d/'generator.cpp').write_text(generator)
+        d = pathlib.Path(directory)
+        (d/'generator.cpp').write_text(GENERATOR)
         run('clang++','-std=c++20','-O2','-I.','-Iruntime/include',str(d/'generator.cpp'),'runtime/src/vu_jit.cpp','-o',str(d/'generator'))
         run(str(d/'generator'),str(d))
         run('cmake','-S',str(ROOT),'-B',str(d/'build'),'-DCMAKE_BUILD_TYPE=Release','-DPS2_WGPU_DIR=/nonexistent')
         run('cmake','--build',str(d/'build'),'--target','ps2runtime','-j','4')
         (d/'driver.cpp').write_text(DRIVER)
         run('clang++','-std=c++20','-O2','-I.','-Iruntime/include','-Iruntime/src',str(d/'driver.cpp'),str(d/'native.cpp'),str(d/'build/libps2runtime.a'),'-o',str(d/'native'))
-        native=subprocess.run([str(d/'native'),str(d/'code.bin')],cwd=ROOT,timeout=900).returncode
+        for kind in range(3):
+            for mode in ('compiled', 'fallback'):
+                for check in (None, '1', 'all'):
+                    env = {k: v for k, v in os.environ.items() if not k.startswith('PS2_')}
+                    if check is not None:
+                        env['PS2_VU_CHECK'] = check
+                    subprocess.run([str(d/'native'), str(d/f'code{kind}.bin'), mode, str(kind)],
+                                   cwd=ROOT, env=env, timeout=900, check=True)
         (d/'wasm.cjs').write_text('try {\n'+WASM+'\n} catch (e) { console.error(e); process.exit(2); }')
-        wasm=subprocess.run(['node',str(d/'wasm.cjs'),str(d)],cwd=ROOT,timeout=900).returncode
-        if native not in (0,1) or wasm not in (0,1):
-            raise RuntimeError('reproducer failed to execute')
-        return int(bool(native or wasm))
+        run('node',str(d/'wasm.cjs'),str(d))
+        return 0
 
 if __name__=='__main__':
     raise SystemExit(main())

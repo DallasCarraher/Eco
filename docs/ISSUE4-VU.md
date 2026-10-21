@@ -1,9 +1,10 @@
 # Issue 4: VU dispatch-boundary investigation
 
-This bounded cycle found a specific flag-liveness/latency discrepancy affecting
-VU registers, memory and emitted GIF packets. No execution fix is applied.
-Agreement between Eco paths does not establish PS2 or visual correctness.
-The frame-510 image cause remains unproven.
+This document records the first investigation cycle, before an execution fix.
+The [follow-up flag-history correction](ISSUE4-VU-FLAGS.md) supersedes its
+continuation decision and current status. The historical observations, failing
+reproducer outputs and artifact paths below are retained. Agreement between
+Eco paths does not establish PS2 or visual correctness.
 
 ## Frozen starting evidence
 

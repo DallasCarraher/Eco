@@ -447,8 +447,6 @@ Lower lower(std::uint32_t w, std::uint32_t pc) {
     return l;
 }
 
-bool upper_sets_flags(std::uint32_t hi) { return upper(hi, true).sets_flags; }
-
 void replace_all(std::string &s, const std::string &from, const std::string &to) {
     for (std::size_t at = s.find(from); at != std::string::npos; at = s.find(from, at + to.size())) s.replace(at, from.size(), to);
 }
@@ -486,19 +484,16 @@ std::string generate(const Program &p, std::string &name) {
     const std::vector<std::uint32_t> pcs = ps2::vu::reachable(p.code.data(), kMask, p.entry);
     std::set<std::uint32_t> in(pcs.begin(), pcs.end());
     std::map<std::uint32_t, Lower> lowers;
-    bool any_status = false, any_flags = false, any_q = false;
+    bool any_q = false;
     for (std::uint32_t pc : pcs) {
         const std::uint32_t lo = word(p.code, pc), hi = word(p.code, pc + 4);
         Lower l;
         if (!(hi & 0x80000000u)) l = lower(lo, pc);
         for (const std::uint32_t latency : {7u, 13u})
             replace_all(l.code, std::format("fl.end_q(r, qb, {}u)", latency), std::format("fl.end_q(r, qb, {}u)", ps2::vu::q_delay(p.code.data(), kMask, pc, latency)));
-        any_status = any_status || l.reads_status;
-        any_flags = any_flags || l.reads_flags;
         any_q = any_q || l.code.find("fl.end_q(") != std::string::npos;
         lowers[pc] = l;
     }
-    std::map<std::uint32_t, bool> live_in;
     const auto successors = [&](std::uint32_t pc) {
         std::vector<std::int64_t> s{static_cast<std::int64_t>((pc + 8u) & kMask)};
         const std::uint32_t prev = (pc - 8u) & kMask;
@@ -510,27 +505,6 @@ std::string generate(const Program &p, std::string &name) {
         }
         return s;
     };
-    for (std::uint32_t pc : pcs) live_in[pc] = false;
-    for (bool changed = true; changed;) {
-        changed = false;
-        for (auto it = pcs.rbegin(); it != pcs.rend(); ++it) {
-            const std::uint32_t pc = *it;
-            bool out = false;
-            for (std::int64_t s : successors(pc)) out = out || s < 0 || !in.count(static_cast<std::uint32_t>(s)) || live_in[static_cast<std::uint32_t>(s)];
-            const std::uint32_t hi = word(p.code, pc + 4);
-            bool reader_near = false;
-            for (std::uint32_t k = 1; k <= 3; ++k) {
-                const std::uint32_t q = (pc + 8u * k) & kMask;
-                if (in.count(q) && (lowers[q].reads_flags || lowers[q].branch || lowers[q].jump)) reader_near = true;
-            }
-            const bool kills = upper_sets_flags(hi) && !reader_near;
-            const bool v = lowers[pc].reads_flags || (!kills && out);
-            if (v != live_in[pc]) {
-                live_in[pc] = v;
-                changed = true;
-            }
-        }
-    }
     std::map<std::uint32_t, int> def;
     std::map<std::uint32_t, std::vector<std::uint32_t>> preds;
     std::set<std::uint32_t> targets;
@@ -564,16 +538,15 @@ std::string generate(const Program &p, std::string &name) {
     for (std::uint32_t pc : pcs)
         for (int reg : upper(word(p.code, pc + 4), true).shadow_reads) shadowed.insert(reg);
     name = std::format("vu1_{:016X}", p.key);
-    std::string o = std::format("void {}(Vu0Regs &r, std::uint8_t *mem) {{\n    FlagPipe fl;\n    fl.start(r);\n    bool pend = false, pendj = false, ending = false;\n    std::uint32_t jpc = 0;\n    (void)pend;\n    (void)pendj;\n    (void)ending;\n    (void)jpc;\n",
+    std::string o = std::format("void {}(Vu0Regs &r, std::uint8_t *mem) {{\n    FlagFrame frame(r);\n    FlagPipe &fl = frame.pipe;\n    bool pend = false, pendj = false, ending = false;\n    std::uint32_t jpc = 0;\n    (void)pend;\n    (void)pendj;\n    (void)ending;\n    (void)jpc;\n",
                                 name);
     if (!delay.empty()) o += "    std::uint16_t bk = 0, next_bk = 0;\n    unsigned bi = 0;\n    (void)bk;\n    (void)next_bk;\n    (void)bi;\n";
     for (int reg : shadowed) o += std::format("    v4u {} = vfix(vload({}));\n", shadow(reg), raw(reg));
     o += std::format("    goto {};\n", label(p.entry & kMask));
     for (std::uint32_t pc : pcs) {
         const std::uint32_t lo = word(p.code, pc), hi = word(p.code, pc + 4);
-        bool out_live = false;
-        for (std::int64_t s : successors(pc)) out_live = out_live || s < 0 || !in.count(static_cast<std::uint32_t>(s)) || live_in[static_cast<std::uint32_t>(s)];
-        const Upper u = upper(hi, any_status ? true : (any_flags && out_live));
+        // A dynamic continuation can read any earlier arithmetic flag.
+        const Upper u = upper(hi, true);
         const Lower &l = lowers[pc];
         std::string body;
         if (keep_bk.count(pc)) body += std::format("next_bk = r.vi[{}]; ", def[pc]);

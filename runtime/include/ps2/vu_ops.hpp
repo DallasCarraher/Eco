@@ -524,6 +524,37 @@ struct FlagPipe {
     }
 };
 
+// A host dispatch boundary is not a VU microprogram start. Keep the flag
+// ring and issue clock alive until the logical VU1 invocation ends. TLS keeps
+// the VU worker's context separate from VU0/EE and diagnostic callers.
+inline thread_local FlagPipe g_dispatch_flags;
+inline thread_local bool g_dispatch_flags_active = false;
+
+struct FlagDispatch {
+    FlagPipe saved = g_dispatch_flags;
+    bool was_active = g_dispatch_flags_active;
+    explicit FlagDispatch(const Vu0Regs &r) {
+        g_dispatch_flags = FlagPipe{};
+        g_dispatch_flags.start(r);
+        g_dispatch_flags_active = true;
+    }
+    ~FlagDispatch() {
+        g_dispatch_flags = saved;
+        g_dispatch_flags_active = was_active;
+    }
+    FlagDispatch(const FlagDispatch &) = delete;
+    FlagDispatch &operator=(const FlagDispatch &) = delete;
+};
+
+struct FlagFrame {
+    FlagPipe local;
+    FlagPipe &pipe;
+    explicit FlagFrame(const Vu0Regs &r, bool vu1 = true)
+        : pipe(vu1 && g_dispatch_flags_active ? g_dispatch_flags : local) {
+        if (&pipe == &local) pipe.start(r);
+    }
+};
+
 PS2_VU_INLINE std::uint8_t *qword(std::uint8_t *mem, std::uint32_t index) { return mem + (index & 1023u) * 16u; }
 PS2_VU_INLINE void set_vi(Vu0Regs &r, unsigned i, std::uint32_t v) {
     if (i) r.vi[i] = static_cast<std::uint16_t>(v);

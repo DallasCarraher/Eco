@@ -26,6 +26,10 @@ int main(int argc, char **argv) {
     std::vector<std::uint8_t> packets;
     ps2::vu::g_check_packets = &packets;
     ps2::vu::g_reference_dry = true;
+    ps2::vuops::FlagDispatch flags(ps2::vu::regs(1));
+    // Older root snapshots predate persistent flag history and start fresh.
+    if (std::filesystem::exists(prefix + "-pipe.bin"))
+        load("-pipe.bin", &ps2::vuops::g_dispatch_flags, sizeof(ps2::vuops::FlagPipe));
     if (std::string(argv[2]) == "compiled") {
         auto fn = ps2::vu::lookup(pc);
         if (!fn) return 3;

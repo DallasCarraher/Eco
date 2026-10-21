@@ -802,6 +802,7 @@ void check_jit(ProgramFn compiled, ProgramFn jit) {
     static std::uint64_t calls = 0, escapes = 0, mismatches = 0;
     static std::uint8_t before_mem[16384], jit_mem[16384];
     const Vu0Regs before = g_vu1;
+    const auto before_pipe = vuops::g_dispatch_flags;
     std::memcpy(before_mem, g_vu1_mem, sizeof before_mem);
     std::vector<std::uint32_t> jit_kicks, kicks;
     jit::g_dry = true;
@@ -813,6 +814,7 @@ void check_jit(ProgramFn compiled, ProgramFn jit) {
     const Vu0Regs after = g_vu1;
     std::memcpy(jit_mem, g_vu1_mem, sizeof jit_mem);
     g_vu1 = before;
+    vuops::g_dispatch_flags = before_pipe;
     std::memcpy(g_vu1_mem, before_mem, sizeof before_mem);
     std::int64_t escape = -1;
     g_kick_log = &kicks;
@@ -859,6 +861,7 @@ void interpret(int unit, std::uint32_t pc) {
         g_chained = pc;
         return;
     }
+    vuops::FlagDispatch flags(g_vu1);
     g_chaining = true;
     for (;;) {
         run_entry(1, pc);
@@ -904,6 +907,7 @@ void run_entry(int unit, std::uint32_t pc) {
                 std::vector<std::uint8_t> compiled_packets, interpreted_packets;
                 static std::uint8_t before_mem[16384], run_mem[16384];
                 const Vu0Regs before = g_vu1;
+                const auto before_pipe = vuops::g_dispatch_flags;
                 std::memcpy(before_mem, g_vu1_mem, sizeof before_mem);
                 std::int64_t escape = -1;
                 const std::uint64_t key = check_all ? g_entries[(pc & 16383u) >> 3].key :
@@ -928,8 +932,10 @@ void run_entry(int unit, std::uint32_t pc) {
                 }
                 g_capture = nullptr;
                 const Vu0Regs after = g_vu1;
+                const auto after_pipe = vuops::g_dispatch_flags;
                 std::memcpy(run_mem, g_vu1_mem, sizeof run_mem);
                 g_vu1 = before;
+                vuops::g_dispatch_flags = before_pipe;
                 std::memcpy(g_vu1_mem, before_mem, sizeof g_vu1_mem);
                 // Call the interpreter loop directly: interpret()
                 // would only queue the entry while a chain is running.
@@ -956,6 +962,7 @@ void run_entry(int unit, std::uint32_t pc) {
                     std::ofstream("vu-first-meta.txt") << pc << " " << g_top << " " << g_itop << " " << escape << "\n";
                     dump("vu-first-code.bin", g_vu1_code, 16384);
                     dump("vu-first-before.bin", &before, sizeof before);
+                    dump("vu-first-pipe.bin", &before_pipe, sizeof before_pipe);
                     dump("vu-first-memory.bin", before_mem, sizeof before_mem);
                     dump("vu-first-compiled.bin", &after, sizeof after);
                     dump("vu-first-interpreted.bin", &g_vu1, sizeof g_vu1);
@@ -999,6 +1006,7 @@ void run_entry(int unit, std::uint32_t pc) {
                         (unsigned long long)checked, (unsigned long long)escaped,
                         (unsigned long long)nonflags, (unsigned long long)frame_count());
                 g_vu1 = after;
+                vuops::g_dispatch_flags = after_pipe;
                 std::memcpy(g_vu1_mem, run_mem, sizeof g_vu1_mem);
                 if (escape >= 0) interpret(1, static_cast<std::uint32_t>(escape));
                 return;
@@ -1070,10 +1078,10 @@ void run_fast(int n, std::uint32_t address) {
     Unit u = unit_of(n);
     Vu0Regs &r = *u.regs;
     if (g_scan[n]) scan_flags(n, u.code, u.code_mask + 1);
-    const bool flags = g_flags_used[n];
+    const bool flags = n == 1 || g_flags_used[n];
     Decoded *cache = g_decoded[n];
-    vuops::FlagPipe pipe;
-    pipe.start(r);
+    vuops::FlagFrame frame(r, n == 1);
+    auto &pipe = frame.pipe;
     u.pipe = &pipe;
     std::uint32_t pc = address & u.code_mask, npc = (pc + 8u) & u.code_mask;
     bool ending = false;

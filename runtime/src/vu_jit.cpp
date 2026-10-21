@@ -305,11 +305,6 @@ bool active(const Up &u, bool flags_live) {
     return !(u.dest == 0 || (u.target == 0 && !(u.flags && flags_live)));
 }
 
-bool sets_flags(std::uint32_t hi) {
-    const Up u = decode_upper(hi);
-    return active(u, true) && u.flags;
-}
-
 std::vector<int> shadow_reads(std::uint32_t hi) {
     const Up u = decode_upper(hi);
     std::vector<int> regs;
@@ -379,7 +374,6 @@ private:
     std::vector<std::uint32_t> pcs_;
     std::set<std::uint32_t> in_;
     std::map<std::uint32_t, LowerInfo> lowers_;
-    std::map<std::uint32_t, bool> live_in_;
     std::map<int, std::uint32_t> shadow_;
     std::vector<std::uint64_t> shadow_in_, shadow_out_;
     std::map<std::uint32_t, std::uint32_t> case_of_;
@@ -390,29 +384,11 @@ private:
     std::set<std::uint32_t> keep_bk_, set_bi_;
     int delay_mode_ = 0;
     unsigned delay_reg_ = 0;
-    bool any_status_ = false, any_flags_ = false;
 
     std::uint32_t word(std::uint32_t at) const {
         std::uint32_t v;
         std::memcpy(&v, code_ + (at & kMask), 4);
         return v;
-    }
-
-    std::vector<std::int64_t> successors(std::uint32_t pc) {
-        std::vector<std::int64_t> s{static_cast<std::int64_t>((pc + 8u) & kMask)};
-        const std::uint32_t prev = (pc - 8u) & kMask;
-        if (in_.count(prev)) {
-            const LowerInfo &pl = lowers_[prev];
-            if (pl.branch) s.push_back(pl.target);
-            if (pl.jump || (word(prev + 4) & 0x40000000u)) s.push_back(-1);
-        }
-        return s;
-    }
-
-    bool out_live(std::uint32_t pc) {
-        for (std::int64_t s : successors(pc))
-            if (s < 0 || !in_.count(static_cast<std::uint32_t>(s)) || live_in_[static_cast<std::uint32_t>(s)]) return true;
-        return false;
     }
 
     std::vector<std::uint32_t> flow(std::uint32_t pc) {
@@ -1699,7 +1675,8 @@ bool Translator::lower(std::uint32_t w, std::uint32_t pc) {
 void Translator::instruction(std::uint32_t pc, std::uint32_t following) {
     const std::uint32_t lo = word(pc), hi = word(pc + 4);
     const Up u = decode_upper(hi);
-    const bool flags_live = any_status_ ? true : (any_flags_ && out_live(pc));
+    // Flags remain observable in a dynamically dispatched continuation.
+    const bool flags_live = true;
     const LowerInfo &li = lowers_[pc];
 
     c_.get(kT);
@@ -1810,35 +1787,42 @@ void Translator::instruction(std::uint32_t pc, std::uint32_t following) {
 }
 
 void Translator::prologue() {
-    for (const std::uint32_t at : {kOffMacTs, kOffMacTs + 16u, kOffClipTs, kOffClipTs + 16u}) {
+    if (!layout_.persistent_flags) {
+        for (const std::uint32_t at : {kOffMacTs, kOffMacTs + 16u, kOffClipTs, kOffClipTs + 16u}) {
+            fl();
+            c_.vconst(0, 0, 0, 0);
+            c_.vstore(at);
+        }
+        const std::pair<std::uint32_t, std::uint32_t> rings[3] = {{kOffMac, kOffMacV}, {kOffStatus, kOffStatusV}, {kOffClip, kOffClipV}};
+        for (const auto &[from, to] : rings) {
+            c_.get(kR);
+            c_.load(from);
+            c_.simd(kVSplat);
+            c_.set(kV0);
+            fl();
+            c_.get(kV0);
+            c_.vstore(to);
+            fl();
+            c_.get(kV0);
+            c_.vstore(to + 16u);
+        }
         fl();
-        c_.vconst(0, 0, 0, 0);
-        c_.vstore(at);
+        c_.i32c(0);
+        c_.store(kOffMh);
+        fl();
+        c_.i32c(0);
+        c_.store(kOffCh);
+        c_.i32c(16);
+        c_.set(kT);
+    } else {
+        fl();
+        c_.load(kOffT);
+        c_.set(kT);
     }
-    const std::pair<std::uint32_t, std::uint32_t> rings[3] = {{kOffMac, kOffMacV}, {kOffStatus, kOffStatusV}, {kOffClip, kOffClipV}};
-    for (const auto &[from, to] : rings) {
-        c_.get(kR);
-        c_.load(from);
-        c_.simd(kVSplat);
-        c_.set(kV0);
-        fl();
-        c_.get(kV0);
-        c_.vstore(to);
-        fl();
-        c_.get(kV0);
-        c_.vstore(to + 16u);
-    }
-    fl();
-    c_.i32c(0);
-    c_.store(kOffMh);
-    fl();
-    c_.i32c(0);
-    c_.store(kOffCh);
+    // Retain the existing Q flush-at-dispatch policy.
     fl();
     c_.i32c(0);
     c_.store8(kOffQPending);
-    c_.i32c(16);
-    c_.set(kT);
     for (unsigned i = 1; i < 16; ++i) {
         if (!(vi_used_ & (1u << i))) continue;
         c_.get(kR);
@@ -1864,30 +1848,8 @@ bool Translator::run(std::vector<std::uint8_t> &out) {
     for (std::uint32_t pc : pcs_) {
         LowerInfo l;
         if (!(word(pc + 4) & 0x80000000u)) l = analyze_lower(word(pc), pc);
-        any_status_ = any_status_ || l.reads_status;
-        any_flags_ = any_flags_ || l.reads_flags;
         lowers_[pc] = l;
     }
-    for (std::uint32_t pc : pcs_) live_in_[pc] = false;
-    for (bool changed = true; changed;) {
-        changed = false;
-        for (auto it = pcs_.rbegin(); it != pcs_.rend(); ++it) {
-            const std::uint32_t pc = *it;
-            const bool out = out_live(pc);
-            bool reader_near = false;
-            for (std::uint32_t k = 1; k <= 3; ++k) {
-                const std::uint32_t q = (pc + 8u * k) & kMask;
-                if (in_.count(q) && (lowers_[q].reads_flags || lowers_[q].branch || lowers_[q].jump)) reader_near = true;
-            }
-            const bool kills = sets_flags(word(pc + 4)) && !reader_near;
-            const bool v = lowers_[pc].reads_flags || (!kills && out);
-            if (v != live_in_[pc]) {
-                live_in_[pc] = v;
-                changed = true;
-            }
-        }
-    }
-
     std::set<std::uint32_t> leaders{entry_, pcs_.front()};
     for (std::uint32_t pc : pcs_) {
         if (!in_.count((pc - 8u) & kMask)) leaders.insert(pc);
@@ -1973,12 +1935,14 @@ bool Translator::run(std::vector<std::uint8_t> &out) {
     }
     c_.byte(0x0B);
     write_back_vi();
+    store_t();
     c_.get(kR);
     c_.get(kExit);
     c_.tail(kInterpret);
     c_.byte(0x0B);
     c_.byte(0x0B);
     write_back_vi();
+    store_t();
     flush_q();
     c_.get(kR);
     c_.get(kExit);
