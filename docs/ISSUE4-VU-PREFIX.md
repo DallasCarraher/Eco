@@ -215,3 +215,85 @@ It needs a disk-budget check before making another full build. The precise
 remaining whole-chain coverage blocker is the invocation exceeding 8,192
 continuations; this prefix experiment does not remove it. Do not increase the
 guard or claim exhaustive agreement from this report.
+
+## Post-Q-fix image validation
+
+The next user-authorized continuation ran only boot-idle CPU compiled and CPU
+interpreted through frame 510, serially with five-frame capture checkpoints.
+The measurement used clean source `da6352fa70669c9b3a0c6e420ed79d65322a2b27`.
+No execution correction was added in this continuation. The committed
+`experiments/jak1-vu-q-validation.json` is byte-identical to the ignored manifest
+used for measurement; it excludes the known guard-blocked whole-chain case.
+
+A private runner in `local/issue4-q-images/` links the previously corrected VU
+objects and freshly compiled interpreter/JIT/host objects before the preserved
+read-only EE/runtime archives. It does not duplicate or rebuild a full game
+archive. The harness generated inventory covers the corrected VU sources;
+`local/issue4-q-images/build.json` additionally records exact build argv,
+archive/object hashes and the final binary hash. Preflight rechecked those
+archive hashes and the baseline full generated inventory before reuse. ISO and
+ELF identities match the preceding flag-fix image experiment. Game-derived code
+and all outputs remain ignored; the completed overnight batch is unchanged.
+
+| CPU case | Frames | Guest cycles | Seconds | Captures |
+| --- | --- | --- | --- | --- |
+| Compiled | 510 | 2,524,450,548 | 93.386 | 98 |
+| Interpreted | 510 | 2,524,450,548 | 95.044 | 98 |
+
+All 98 available captures match byte-for-byte between the new paths. Each new
+path also matches its corresponding pre-Q-fix capture set from
+`local/experiments/issue4-flags-validation-510/`: zero differing pixels and
+maximum channel delta zero in each comparison. Frame 480 and 510 captures are
+present. Thus the Q correction has no measured CPU image effect on this route,
+while retaining the earlier flag correction's measured image convergence.
+This does not establish state equality between every intermediate instruction.
+
+**Coverage correction:** earlier prose incorrectly reported 102 captures in the
+first-cycle and flag-fix validations. Their sealed reports actually contain 98,
+covering frames 25 through 510 every five frames. Requested frames 5, 10, 15
+and 20 are absent from both paths, including this new batch. Those historical
+prose counts are corrected; no archived report, capture, expected result or
+comparison rule changed. The harness preserves `reliable: false` for incomplete
+requested coverage even though every available image agrees. There is only one
+new run per variant, so new-build repeatability remains unestablished. This
+ordinary two-case batch does not measure VU-check coverage or final counters.
+
+Evidence and exact measurement command, from the isolated checkout:
+
+```sh
+python3 local/issue4-q-images/build.py
+python3 scripts/run_experiments.py \
+  --manifest local/issue4-q-images/manifest.json \
+  --iso '/Users/dallascarraher/Developer/Eco/Jak and Daxter - The Precursor Legacy (USA) (En,Fr,De,Es,It) (Rev 1).iso' \
+  --runner local/issue4-q-images/ps2run \
+  --elf games/jak1/disc/SCUS_971.24 \
+  --generated local/issue4-prefix/q-fixed/generated \
+  --output local/experiments/issue4-q-images-510
+python3 local/issue4-q-images/compare.py
+```
+
+These are archived commands, not instructions to overwrite the completed
+runner/output. A repeat needs new build/output locations and a fresh cumulative
+budget check. The committed manifest can replace the ignored manifest path.
+`build.py`, `build.json`, `build.txt`, `preflight.json`, `harness.txt` and
+`comparison.json` are in `local/issue4-q-images/`. The comparison program verified
+431 sealed files across both old and new reports, and checked exact bytes for
+all common captures. The new batch's own report, immutable case directories,
+logs and captures are in `local/experiments/issue4-q-images-510/`.
+
+Measured game subprocess time added here is 188.429 seconds; no case approaches
+900 seconds. Cumulative measured game replay remains below 20 minutes, excluding
+short builds/synthetics, well below four hours. Retained build/generated/local
+artifacts total 2,028,410,978 bytes (about 1.89 GiB) after validation, with about
+27.9 GiB free. Only about 113 MiB remains under the 2 GiB cap, less than another
+two-case capture batch; do not rerun it under the current retained-output budget.
+
+This validation cycle is complete. The Q state discrepancy is fixed and its
+original synthetic regression passes; its observed saved prefix is exact, and
+no image change was measured through frame 510. The original sampled flags-only
+call remains unproven as the unique image cause. Full-chain coverage is still
+blocked by the unchanged 8,192-continuation guard. GPU/backend effects, browser
+integration and independent PS2/visual correctness remain outside this result.
+No further broad replay is justified by a newly observed image discrepancy.
+A separately authorized investigation of bounded whole-invocation coverage or
+an independent reference comparison would address the remaining uncertainty.

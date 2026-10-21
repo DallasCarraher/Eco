@@ -124,7 +124,10 @@ The plain compiled/interpreted cases ran at clean revision
 `a48d8ff54d1c81fb361e2e72b71e20b2c9f63a9e`, using the regenerated VU inventory
 hash `a719caeff6d17300367f6d0a6433c2e1447a8e72f7ee0a900b7373273277fc30`.
 Both reached 510 frames and 2,524,450,548 guest cycles (95.7 and 97.3 seconds).
-All **102 captures match exactly**, with no tolerances. The corrected
+All **98 available captures match exactly**, with no tolerances. Requested
+frames 5, 10, 15 and 20 are missing in both cases; the harness marks the
+overall comparison `reliable: false` for that incomplete coverage. Frames
+25 through 510, including 480 and 510, are present. The corrected
 interpreted captures are unchanged from the previous interpreted case; only
 compiled frames 500, 505 and 510 changed from the previous compiled case.
 Consequently this correction removes the measured CPU-backend image gap.

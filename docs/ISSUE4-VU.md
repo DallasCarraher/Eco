@@ -183,7 +183,9 @@ chain scope, not totals of all VU execution or hardware validation. They cannot
 be equated with the archived 62 sampled nonescaping mismatches. Legacy sampled
 final/eligible/skipped counts remain unknown.
 
-All 102 whole-chain-check capture hashes exactly match the plain compiled case.
+All 98 available whole-chain-check capture hashes exactly match the plain
+compiled case. Requested frames 5, 10, 15 and 20 are missing in each case;
+the harness marks overall capture coverage incomplete.
 For each plain path, all 17 overlapping archived capture hashes match as well.
 Frame 495 is equal between paths; frame 500 differs at 9,900 pixels (maximum
 channel delta 122); frame 510 still differs at 9,994 pixels (maximum 191).
@@ -210,7 +212,7 @@ packet streams for both paths exactly.
 Artifacts are under the isolated checkout's ignored storage:
 
 - `local/experiments/issue4-validation-510/`: final manifest snapshot, full
-  identities, reports, logs, 102 captures per case and first-discrepancy dumps.
+  identities, reports, logs, 98 available captures per case and first-discrepancy dumps.
 - `local/experiments/issue4-chains-510/boot-idle--vu-all--1--2a234941e76c/`:
   original complete-chain snapshot used for offline tracing and replay.
 - `local/experiments/issue4-segments-510/`: exploratory split-boundary result.

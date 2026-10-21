@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "status": "implemented_native_v1",
+  "name": "jak1-issue4-q-images",
+  "game": {
+    "serial": "SCUS_971.24",
+    "revision": "USA Rev 1"
+  },
+  "defaults": {
+    "frames": 510,
+    "frame_every": 5,
+    "repetitions": 1,
+    "case_timeout_seconds": 900,
+    "total_timeout_seconds": 1800,
+    "max_output_bytes": 152043520,
+    "min_free_disk_bytes": 10737418240,
+    "concurrency": 1,
+    "environment": {
+      "PS2_WINDOW_FULL": "1"
+    },
+    "initial_memory_card": "fresh_per_case"
+  },
+  "scenarios": [
+    {
+      "id": "boot-idle",
+      "presses": []
+    }
+  ],
+  "variants": [
+    {
+      "id": "cpu-compiled",
+      "environment": {
+        "PS2_GS": "cpu"
+      }
+    },
+    {
+      "id": "cpu-interpreted",
+      "environment": {
+        "PS2_GS": "cpu",
+        "PS2_VU_INTERPRET": "1"
+      }
+    }
+  ],
+  "acceptance": {
+    "runtime_completion": "explicit_frame_limit_reached",
+    "visual_correctness": "requires_reference_review",
+    "gameplay_verified": false
+  }
+}
