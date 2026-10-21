@@ -163,3 +163,99 @@ a new ignored output prefix. The tool writes registers, memory and packets;
 compare those with the saved `vu-first-*-memory.bin`, `vu-first-*.bin` and
 `vu-first-*-packets.bin`. Its output is native-ABI diagnostic data, not a
 portable save state. Keep generated table/code files from the recorded identity.
+
+## Final validation and continuation decision
+
+Frozen measurement revision: `34dc9441a14bc2410b95fcaca187b3e3c0717fc2`, clean.
+All three cases completed 510 frames, each at 2,524,450,548 guest cycles:
+
+| Case | Seconds | Result |
+| --- | ---: | --- |
+| CPU compiled | 87.5 | 510-frame limit |
+| CPU interpreted | 97.2 | 510-frame limit |
+| CPU whole-chain check | 89.5 | 510-frame limit |
+
+Final normal-exit chain counters: 21,852 compiled-root chains; 3,637,453
+continuations; zero interpreter fallbacks; 7,153 exact mismatches, including
+3,974 with a discrepancy beyond flags. These are the diagnostic's defined
+chain scope, not totals of all VU execution or hardware validation. They cannot
+be equated with the archived 62 sampled nonescaping mismatches. Legacy sampled
+final/eligible/skipped counts remain unknown.
+
+All 102 whole-chain-check capture hashes exactly match the plain compiled case.
+For each plain path, all 17 overlapping archived capture hashes match as well.
+Frame 495 is equal between paths; frame 500 differs at 9,900 pixels (maximum
+channel delta 122); frame 510 still differs at 9,994 pixels (maximum 191).
+Frame 500 is the first unequal five-frame checkpoint, not a proof that earlier
+unsampled frames are equal. No rendering correction is claimed.
+
+The saved trace also demonstrates a control-flow consequence: after FSAND
+produces differing VI2 at index 434, the IBNE on VI2 at micro PC `1370` sends
+the paths to `1380`/`1390` after its delay slot, at index 438. Thus this is a
+concrete VU execution/state divergence, rather than a GS backend effect or a
+comparison of unmatched endpoints. The counterfactual flag-store experiment
+still shows that liveness alone is insufficient. No source execution fix was
+landed, and the particular sampled `7A23...` flags mismatch has not been
+causally tied to the frame-500/510 images.
+
+Validation: all 21 runner tests passed; all eight existing native and eight
+existing Wasm VU regressions passed. The new synthetic reproducer deliberately
+returns exit 1 with native/Wasm `(0,0)` against `(0,2)`. Its forced-native-flags
+variant returns exit 1 with native `(2,2)` and Wasm `(0,0)`. No expected output,
+tolerance or mismatch reporting was changed to hide these failures. The
+committed offline replay tool reproduces the saved registers, memory and
+packet streams for both paths exactly.
+
+Artifacts are under the isolated checkout's ignored storage:
+
+- `local/experiments/issue4-validation-510/`: final manifest snapshot, full
+  identities, reports, logs, 102 captures per case and first-discrepancy dumps.
+- `local/experiments/issue4-chains-510/boot-idle--vu-all--1--2a234941e76c/`:
+  original complete-chain snapshot used for offline tracing and replay.
+- `local/experiments/issue4-segments-510/`: exploratory split-boundary result.
+- `local/experiments/issue4-all-510/`: deliberately cancelled expensive probe.
+- `local/issue4/`: identity verification, validation analysis, bounded trace
+  prefixes and trace analysis, synthetic/test/build logs, preview images and
+  local trace construction scripts. `reproduce-trace.sh` records the exact
+  local trace command; `make_trace.py` adds bounded hooks to private copies of
+  the generated VU files. No such files are committed.
+
+Exact offline replay of the investigated snapshot, after the compilation
+command above (the two output prefixes must be new):
+
+```sh
+local/issue4/replay \
+  local/experiments/issue4-chains-510/boot-idle--vu-all--1--2a234941e76c/vu-first \
+  compiled local/issue4/replayed-compiled
+local/issue4/replay \
+  local/experiments/issue4-chains-510/boot-idle--vu-all--1--2a234941e76c/vu-first \
+  interpreted local/issue4/replayed-interpreted
+python3 -m unittest discover -s scripts -p test_run_experiments.py -v
+python3 scripts/test_vu_codegen.py
+python3 scripts/repro_vu_dispatch_flags.py
+python3 scripts/repro_vu_dispatch_flags.py --force-native-flags
+```
+
+The last two commands are expected to exit 1 until corrected. The measurement
+output directory in the earlier command already exists locally: choose a new
+ignored directory to repeat, and preserve prior reports.
+
+Recorded game replay time across the exploratory and validation reports is
+584.5 seconds, including 132.1 seconds for the cancelled probe. No case reached
+its 900-second limit. Build, copied generated inputs and local artifacts total
+about 913 MiB at the end (plus small previews in the original checkout), below
+2 GiB; free disk stayed about 30 GiB, above 10 GiB. Synthetic builds were
+private temporary directories and were removed. All original-batch listed
+artifact hashes were reverified after validation; the original tracked tree
+was not modified.
+
+Further investigation is justified, but is not started in this cycle. The
+smallest next experiment is to keep one flag-history context across the two
+synthetic native/Wasm dispatch fragments while retaining the producer writes,
+then require `(0,2)` in both and add an interpreter-fallback boundary variant.
+The precise blocker to a liveness-only fix is lost in-flight flag history at
+host dispatch. Once that handoff contract is tested, repeat the three-case
+510-frame comparison to measure effects on the saved call and images. Q and
+branch history across dispatch remain separate uncertainties; the transient Q
+difference is not fixed or asserted harmless. Do not treat removal of this
+one discrepancy as visual, hardware or gameplay signoff.

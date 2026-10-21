@@ -222,3 +222,10 @@ Synthetic regression suite:
 ```sh
 python3 -m unittest discover -s scripts -p test_run_experiments.py -v
 ```
+
+For issue 4, the separate [bounded VU diagnostic](ISSUE4-VU.md) adds opt-in
+`PS2_VU_CHECK=all` complete-chain comparison and final chain counters, distinct
+from the legacy sampled observations above. The three-case
+`experiments/jak1-vu-issue4.json` manifest stops at 510 frames. This mode is
+instrumentation, not an acceptance oracle or a replacement for the startup
+matrix.
