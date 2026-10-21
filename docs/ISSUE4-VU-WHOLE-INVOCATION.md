@@ -1,5 +1,10 @@
 # Issue 4: saved whole invocation compared exactly
 
+**Follow-up:** the [production integration](ISSUE4-VU-CHAIN-INTEGRATION.md) now
+reports bounded comparison outcomes through the normal dispatcher. The default
+remains 8,192, with explicit 16,384 policy available. The saved production-adapter
+replay reproduces this complete result; broader game/browser runs remain open.
+
 The saved frame-192 invocation, key `8A7C5336C2223702`, entry `0020`, root index
 348, **completes with exact compiled/interpreter agreement** after **9,363
 continuations and 129,186 issued instructions**, ending at PC `0x0A00`.

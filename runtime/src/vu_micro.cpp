@@ -861,6 +861,142 @@ bool g_chaining = false;
 std::int64_t g_chained = -1;
 std::uint64_t g_last_key = 0;
 
+} // namespace ps2::vu
+#include "vu_checkpoint.hpp"
+namespace ps2::vu {
+
+bool g_check_tail = false;
+
+bool check_all_enabled() {
+    static const bool enabled = std::getenv("PS2_VU_CHECK") &&
+        std::strcmp(std::getenv("PS2_VU_CHECK"), "all") == 0;
+    return enabled;
+}
+
+unsigned check_continuation_limit() {
+    static const unsigned limit = [] {
+        const char* value = std::getenv("PS2_VU_CHECK_CONTINUATIONS");
+        if (!value || std::strcmp(value, "8192") == 0) return 8192u;
+        if (std::strcmp(value, "16384") == 0) return 16384u;
+        return 0u;
+    }();
+    return limit;
+}
+
+struct ChainCheckStats {
+    std::uint64_t attempted = 0, complete = 0, mismatch = 0, budget = 0, unsupported = 0;
+    std::uint64_t unchecked_tail = 0, checkpoints = 0, continuations = 0;
+    ~ChainCheckStats() {
+        std::fprintf(stderr,
+            "[vu-chain-outcomes] attempted %llu complete %llu mismatch %llu budget_exhausted %llu unsupported %llu unchecked_tail_dispatches %llu checkpoints %llu continuations %llu\n",
+            (unsigned long long)attempted, (unsigned long long)complete, (unsigned long long)mismatch,
+            (unsigned long long)budget, (unsigned long long)unsupported, (unsigned long long)unchecked_tail,
+            (unsigned long long)checkpoints, (unsigned long long)continuations);
+    }
+};
+ChainCheckStats& chain_check_stats() { static ChainCheckStats stats; return stats; }
+struct ChainCheckResult {
+    vu_checkpoint::Outcome outcome = vu_checkpoint::Outcome::unsupported;
+    const char* reason = "not_started";
+    unsigned continuations = 0, issued = 0, checkpoints = 0, next_pc = 0;
+};
+ChainCheckResult g_last_chain_check;
+
+void check_chain(std::uint32_t pc) {
+    using namespace vu_checkpoint;
+    const unsigned ceiling = check_continuation_limit();
+    lookup(pc);
+    const auto key = g_entries[(pc & 16383u) >> 3].key;
+    Image initial; initial.save();
+    Comparison comparison(initial, pc, ceiling ? ceiling : 8192);
+    // The compiled path alone emits live GIF packets, at the original kicks.
+    // Dry comparison/replay callers retain their enclosing dry-run policy.
+    if (ceiling) comparison.run(256, !g_reference_dry);
+    else comparison.reason = "invalid_configuration";
+    auto& result = comparison.compiled;
+    auto& stats = chain_check_stats();
+    ++stats.attempted;
+    stats.checkpoints += comparison.checkpoints;
+    stats.continuations += result.continuations;
+    switch (comparison.outcome) {
+    case Outcome::complete_match: ++stats.complete; break;
+    case Outcome::mismatch: ++stats.mismatch; break;
+    case Outcome::budget_exhausted: ++stats.budget; break;
+    case Outcome::unsupported: ++stats.unsupported; break;
+    }
+    g_last_chain_check = {comparison.outcome, comparison.reason, result.continuations,
+                          result.issued, comparison.checkpoints, result.pc};
+    const bool log_failure = (comparison.outcome == Outcome::mismatch && stats.mismatch <= 20) ||
+        (comparison.outcome == Outcome::budget_exhausted && stats.budget <= 20) ||
+        (comparison.outcome == Outcome::unsupported && stats.unsupported <= 20);
+    if (log_failure ||
+        stats.attempted == 1 || stats.attempted % 100000 == 0) {
+        std::fprintf(stderr,
+            "[vu-chain-result] outcome=%s reason=%s key=%016llX entry=%04X continuations=%u issued=%u checkpoints=%u limit=%u next=%04X exact=%d/%d/%d/%d/%d\n",
+            name(comparison.outcome), comparison.reason, (unsigned long long)key, pc,
+            result.continuations, result.issued, comparison.checkpoints, ceiling, result.pc,
+            comparison.registers_equal, comparison.memory_equal, comparison.packets_equal,
+            comparison.pipeline_equal, comparison.control_equal);
+    }
+    static bool captured_mismatch = false, captured_incomplete = false;
+    const bool mismatch = comparison.outcome == Outcome::mismatch;
+    bool& captured = mismatch ? captured_mismatch : captured_incomplete;
+    if (comparison.outcome != Outcome::complete_match && !captured) {
+        captured = true;
+        const std::string prefix = mismatch ? "vu-chain-mismatch-" : "vu-chain-incomplete-";
+        const auto dump = [&](const char* suffix, const void* data, std::size_t size) {
+            std::ofstream(prefix + suffix, std::ios::binary).write(static_cast<const char*>(data), size);
+        };
+        std::ofstream(prefix + "meta.txt") << pc << ' ' << g_top << ' ' << g_itop << " -1\n";
+        std::ofstream(prefix + "outcome.txt") << name(comparison.outcome) << ' ' << comparison.reason << ' '
+            << result.continuations << ' ' << result.issued << ' ' << comparison.checkpoints << '\n';
+        dump("code.bin", g_vu1_code, 16384);
+        dump("before.bin", initial.registers.data(), initial.registers.size());
+        dump("memory.bin", initial.memory.data(), initial.memory.size());
+        dump("pipe.bin", &initial.pipe, sizeof initial.pipe);
+        dump("compiled.bin", result.image.registers.data(), result.image.registers.size());
+        dump("interpreted.bin", comparison.interpreted.image.registers.data(), comparison.interpreted.image.registers.size());
+        dump("compiled-memory.bin", result.image.memory.data(), result.image.memory.size());
+        dump("interpreted-memory.bin", comparison.interpreted.image.memory.data(), comparison.interpreted.image.memory.size());
+        dump("compiled-packets.bin", result.image.packets.data(), result.image.packets.size());
+        dump("interpreted-packets.bin", comparison.interpreted.image.packets.data(), comparison.interpreted.image.packets.size());
+        dump("compiled-pipe.bin", &result.image.pipe, sizeof result.image.pipe);
+        dump("interpreted-pipe.bin", &comparison.interpreted.image.pipe, sizeof comparison.interpreted.image.pipe);
+        dump("interpreter-cursor.bin", &comparison.interpreted.cursor, sizeof comparison.interpreted.cursor);
+    }
+    // Context guards restore the host after each side. Install only the actual
+    // compiled state; dry-reference effects never become live execution state.
+    result.image.install();
+    if (g_check_packets) {
+        if (g_check_packets->size() + result.image.packets.size() > 1024 * 1024) {
+            std::fputs("[vu-check] packet capture exceeded 1 MiB per call\n", stderr);
+            std::abort();
+        }
+        g_check_packets->insert(g_check_packets->end(), result.image.packets.begin(), result.image.packets.end());
+    }
+    if (!result.complete) {
+        // Stop comparison, not the guest invocation. Its remainder follows the
+        // normal dispatcher under the same pipe, explicitly counted unchecked.
+        g_check_tail = true;
+        interpret(1, result.pc);
+    }
+}
+
+// Used by normal invocation entry and frozen-input production diagnostic replay.
+// Caller owns the active FlagDispatch and any initial pipeline restoration.
+void run_chain(std::uint32_t pc) {
+    g_chaining = true;
+    g_check_tail = false;
+    for (;;) {
+        run_entry(1, pc);
+        if (g_chained < 0) break;
+        pc = static_cast<std::uint32_t>(g_chained);
+        g_chained = -1;
+    }
+    g_check_tail = false;
+    g_chaining = false;
+}
+
 void interpret(int unit, std::uint32_t pc) {
     if (unit == 1 && g_capture) {
         *g_capture = pc;
@@ -875,14 +1011,7 @@ void interpret(int unit, std::uint32_t pc) {
         return;
     }
     vuops::FlagDispatch flags(g_vu1);
-    g_chaining = true;
-    for (;;) {
-        run_entry(1, pc);
-        if (g_chained < 0) break;
-        pc = static_cast<std::uint32_t>(g_chained);
-        g_chained = -1;
-    }
-    g_chaining = false;
+    run_chain(pc);
 }
 
 void run_entry(int unit, std::uint32_t pc) {
@@ -892,6 +1021,10 @@ void run_entry(int unit, std::uint32_t pc) {
     static const bool count = std::getenv("PS2_VU_COUNT") != nullptr;
     static std::uint64_t compiled = 0, interpreted = 0;
     static std::unordered_map<std::uint32_t, std::uint64_t> misses;
+    if (unit == 1 && !interpret_only && check_all_enabled()) {
+        if (!g_check_tail) { check_chain(pc); return; }
+        ++chain_check_stats().unchecked_tail;
+    }
     if (unit == 1 && !interpret_only) {
         const ProgramFn fn = lookup(pc);
         if (fn) {
@@ -899,144 +1032,61 @@ void run_entry(int unit, std::uint32_t pc) {
             const ProgramFn jit = g_entries[(pc & 16383u) >> 3].jit;
             static std::uint64_t sampled = 0;
             static const bool check_vs_interpreter = std::getenv("PS2_VU_CHECK") != nullptr;
-            static const bool check_all = check_vs_interpreter && std::strcmp(std::getenv("PS2_VU_CHECK"), "all") == 0;
             static bool checking = false;
-            if (check_vs_interpreter && !checking && (check_all || ++sampled % 64 == 0)) {
-                // Compare two implementations from the same state. Neither is
-                // an independent correctness oracle. "all" checks every
-                // eligible dispatch chain and captures the first non-flag discrepancy.
-                static std::uint64_t checked = 0, mismatches = 0, escaped = 0, nonflags = 0;
-                struct ChainStats {
-                    bool enabled;
-                    std::uint64_t chains = 0, continuations = 0, fallbacks = 0, mismatches = 0, nonflags = 0;
-                    ~ChainStats() {
-                        if (enabled) std::fprintf(stderr,
-                            "[vu-chain-summary] compared %llu chains, %llu continuations, %llu interpreter fallbacks, %llu mismatches, %llu nonflag\n",
-                            (unsigned long long)chains, (unsigned long long)continuations, (unsigned long long)fallbacks,
-                            (unsigned long long)mismatches, (unsigned long long)nonflags);
-                    }
-                };
-                static ChainStats stats{check_all};
-                std::vector<std::uint8_t> compiled_packets, interpreted_packets;
+            // Legacy sampled mode remains separate from whole-chain coverage.
+            if (check_vs_interpreter && !check_all_enabled() && !checking && ++sampled % 64 == 0) {
+                static std::uint64_t checked = 0, mismatches = 0;
                 static std::uint8_t before_mem[16384], run_mem[16384];
                 const Vu0Regs before = g_vu1;
                 const auto before_pipe = vuops::g_dispatch_flags;
                 std::memcpy(before_mem, g_vu1_mem, sizeof before_mem);
                 std::int64_t escape = -1;
-                const std::uint64_t key = check_all ? g_entries[(pc & 16383u) >> 3].key :
-                    program_key(g_vu1_code, reachable(g_vu1_code, 16383u, pc & 16383u), pc & 16383u);
-                if (check_all) g_check_packets = &compiled_packets;
                 g_capture = &escape;
                 fn(g_vu1, g_vu1_mem);
-                if (check_all) {
-                    // Follow dispatch boundaries just as the compiled runtime does,
-                    // then compare with one uninterrupted interpreter invocation.
-                    for (unsigned segments = 0; escape >= 0; ++segments) {
-                        if (segments >= 8192) {
-                            // Preserve a bounded reproducer instead of extending the guard.
-                            const auto dump = [](const char *name, const void *data, std::size_t size) {
-                                std::ofstream(name, std::ios::binary).write(static_cast<const char *>(data), size);
-                            };
-                            std::ofstream("vu-limit-meta.txt") << pc << " " << g_top << " " << g_itop << " -1\n";
-                            dump("vu-limit-code.bin", g_vu1_code, 16384);
-                            dump("vu-limit-before.bin", &before, sizeof before);
-                            dump("vu-limit-memory.bin", before_mem, sizeof before_mem);
-                            dump("vu-limit-pipe.bin", &before_pipe, sizeof before_pipe);
-                            std::fprintf(stderr,
-                                "[vu-check] chain exceeded 8192 segments: frame %llu key %016llX entry %04X chain %llu next %04X issue-clock %u/%u\n",
-                                (unsigned long long)frame_count(), (unsigned long long)key, pc,
-                                (unsigned long long)checked, (unsigned)escape, before_pipe.t, vuops::g_dispatch_flags.t);
-                            std::abort();
-                        }
-                        const auto next = static_cast<std::uint32_t>(escape);
-                        escape = -1;
-                        ++stats.continuations;
-                        if (const ProgramFn continuation = lookup(next)) continuation(g_vu1, g_vu1_mem);
-                        else { ++stats.fallbacks; run_fast(1, next); }
-                    }
-                }
                 g_capture = nullptr;
                 const Vu0Regs after = g_vu1;
                 const auto after_pipe = vuops::g_dispatch_flags;
                 std::memcpy(run_mem, g_vu1_mem, sizeof run_mem);
                 g_vu1 = before;
                 vuops::g_dispatch_flags = before_pipe;
-                std::memcpy(g_vu1_mem, before_mem, sizeof g_vu1_mem);
-                // Call the interpreter loop directly: interpret()
-                // would only queue the entry while a chain is running.
+                std::memcpy(g_vu1_mem, before_mem, sizeof before_mem);
                 checking = true;
+                const bool was_dry = g_reference_dry;
+                auto* packets = g_check_packets;
                 g_reference_dry = true;
-                if (check_all) g_check_packets = &interpreted_packets;
-                run_fast(1, pc);
-                g_reference_dry = false;
-                checking = false;
                 g_check_packets = nullptr;
-                const bool comparable = escape < 0;
-                if (escape >= 0) ++escaped;
-                Vu0Regs flag_normalized = g_vu1;
-                flag_normalized.mac = after.mac;
-                flag_normalized.status = after.status;
-                flag_normalized.clip = after.clip;
-                const bool nonflag = std::memcmp(&after, &flag_normalized, sizeof after) != 0 ||
-                    std::memcmp(run_mem, g_vu1_mem, sizeof run_mem) != 0 || compiled_packets != interpreted_packets;
-                if (check_all && comparable && nonflag && ++nonflags == 1) {
-                    // Fixed-size inputs/outputs and bounded packets; only one dump per process.
-                    const auto dump = [](const char *name, const void *data, std::size_t size) {
-                        std::ofstream(name, std::ios::binary).write(static_cast<const char *>(data), size);
-                    };
-                    std::ofstream("vu-first-meta.txt") << pc << " " << g_top << " " << g_itop << " " << escape << "\n";
-                    dump("vu-first-code.bin", g_vu1_code, 16384);
-                    dump("vu-first-before.bin", &before, sizeof before);
-                    dump("vu-first-pipe.bin", &before_pipe, sizeof before_pipe);
-                    dump("vu-first-memory.bin", before_mem, sizeof before_mem);
-                    dump("vu-first-compiled.bin", &after, sizeof after);
-                    dump("vu-first-interpreted.bin", &g_vu1, sizeof g_vu1);
-                    dump("vu-first-compiled-memory.bin", run_mem, sizeof run_mem);
-                    dump("vu-first-interpreted-memory.bin", g_vu1_mem, sizeof run_mem);
-                    dump("vu-first-compiled-packets.bin", compiled_packets.data(), compiled_packets.size());
-                    dump("vu-first-interpreted-packets.bin", interpreted_packets.data(), interpreted_packets.size());
-                    std::fprintf(stderr, "[vu-first] frame %llu key %016llX entry %04X call %llu packets %zu/%zu\n",
-                        static_cast<unsigned long long>(frame_count()), static_cast<unsigned long long>(key), pc,
-                        static_cast<unsigned long long>(checked), compiled_packets.size(), interpreted_packets.size());
-                }
-                if (comparable && (std::memcmp(&after, &g_vu1, sizeof after) != 0 || std::memcmp(run_mem, g_vu1_mem, sizeof run_mem) != 0 || compiled_packets != interpreted_packets)) {
-                    if (check_all && mismatches == 0) {
-                        std::ofstream("vu-flags-code.bin", std::ios::binary).write(reinterpret_cast<const char *>(g_vu1_code), 16384);
-                        std::ofstream("vu-flags-before.bin", std::ios::binary).write(reinterpret_cast<const char *>(&before), sizeof before);
-                        std::ofstream("vu-flags-memory.bin", std::ios::binary).write(reinterpret_cast<const char *>(before_mem), sizeof before_mem);
-                        std::fprintf(stderr, "[vu-first-status] frame %llu mac %X/%X status %X/%X clip %X/%X\n",
-                            (unsigned long long)frame_count(), after.mac, g_vu1.mac, after.status, g_vu1.status, after.clip, g_vu1.clip);
-                    }
+                run_fast(1, pc);
+                g_reference_dry = was_dry;
+                g_check_packets = packets;
+                checking = false;
+                if (escape < 0 && (std::memcmp(&after, &g_vu1, sizeof after) != 0 ||
+                    std::memcmp(run_mem, g_vu1_mem, sizeof run_mem) != 0)) {
                     if (++mismatches <= 20) {
-                        int vf = -1;
+                        const auto key = program_key(g_vu1_code, reachable(g_vu1_code, 16383u, pc), pc);
+                        int vf = -1, vi = -1;
                         for (int i = 0; i < 32 && vf < 0; ++i)
                             if (std::memcmp(&after.vf[i], &g_vu1.vf[i], 16) != 0) vf = i;
-                        int vi = -1;
                         for (int i = 0; i < 16 && vi < 0; ++i)
                             if (after.vi[i] != g_vu1.vi[i]) vi = i;
-                        std::uint32_t word = ~0u;
-                        for (int i = 0; i < 16384 && word == ~0u; ++i) word = run_mem[i] ^ g_vu1_mem[i] ? i : ~0u;
-                        std::fprintf(stderr, "[vu-check] key %016llX entry %04X call %llu: vf%d vi%d q/p/i/r %d flags %d mem %d\n", static_cast<unsigned long long>(key),
-                                     pc & 16383u, static_cast<unsigned long long>(checked), vf, vi,
-                                     after.q != g_vu1.q || after.p != g_vu1.p || after.i != g_vu1.i || after.r != g_vu1.r,
-                                     after.mac != g_vu1.mac || after.status != g_vu1.status || after.clip != g_vu1.clip, word == ~0u ? -1 : static_cast<int>(word));
+                        std::fprintf(stderr,
+                            "[vu-check] key %016llX entry %04X call %llu: vf%d vi%d q/p/i/r %d flags %d mem %d\n",
+                            (unsigned long long)key, pc, (unsigned long long)checked, vf, vi,
+                            after.q != g_vu1.q || after.p != g_vu1.p || after.i != g_vu1.i || after.r != g_vu1.r,
+                            after.mac != g_vu1.mac || after.status != g_vu1.status || after.clip != g_vu1.clip,
+                            std::memcmp(run_mem, g_vu1_mem, sizeof run_mem) != 0);
                     }
                 }
                 ++checked;
-                if (check_all) { stats.chains = checked; stats.mismatches = mismatches; stats.nonflags = nonflags; }
-                if (!check_all && (checked == 1 || checked % 100 == 0))
-                    std::fprintf(stderr, "[vu-check-summary] sampled %llu calls, %llu mismatches\n", static_cast<unsigned long long>(checked), static_cast<unsigned long long>(mismatches));
-                if (check_all && (checked == 1 || checked % 100000 == 0))
-                    std::fprintf(stderr, "[vu-all] compared %llu escaped %llu nonflag %llu frame %llu\n",
-                        (unsigned long long)checked, (unsigned long long)escaped,
-                        (unsigned long long)nonflags, (unsigned long long)frame_count());
+                if (checked == 1 || checked % 100 == 0) std::fprintf(stderr,
+                    "[vu-check-summary] sampled %llu calls, %llu mismatches\n",
+                    (unsigned long long)checked, (unsigned long long)mismatches);
                 g_vu1 = after;
                 vuops::g_dispatch_flags = after_pipe;
-                std::memcpy(g_vu1_mem, run_mem, sizeof g_vu1_mem);
+                std::memcpy(g_vu1_mem, run_mem, sizeof run_mem);
                 if (escape >= 0) interpret(1, static_cast<std::uint32_t>(escape));
                 return;
             }
-            if (jit && jit != fn && ++sampled % 32 == 0) check_jit(fn, jit);
+            if (!check_all_enabled() && jit && jit != fn && ++sampled % 32 == 0) check_jit(fn, jit);
             else fn(g_vu1, g_vu1_mem);
             return;
         }

@@ -19,7 +19,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-ENV_KEYS = {'PS2_WINDOW_FULL', 'PS2_GS', 'PS2_VU_INTERPRET', 'PS2_GS_COMPARE', 'PS2_VU_CHECK'}
+ENV_KEYS = {'PS2_WINDOW_FULL', 'PS2_GS', 'PS2_VU_INTERPRET', 'PS2_GS_COMPARE', 'PS2_VU_CHECK', 'PS2_VU_CHECK_CONTINUATIONS'}
 STATUSES = {'frame_limit_reached', 'runtime_halted', 'timeout', 'process_failed',
             'unsupported', 'output_limit', 'disk_limit', 'cancelled', 'incomplete'}
 
@@ -105,10 +105,12 @@ def manifest_read(path):
         if not isinstance(env, dict) or set(env) - ENV_KEYS:
             raise ValueError('environment must use the PS2 setting allowlist')
         for key, value in env.items():
-            if value not in ({'cpu', 'gpu', 'both'} if key == 'PS2_GS' else {'1', 'all'} if key == 'PS2_VU_CHECK' else {'1'}):
+            if value not in ({'cpu', 'gpu', 'both'} if key == 'PS2_GS' else {'1', 'all'} if key == 'PS2_VU_CHECK' else {'8192', '16384'} if key == 'PS2_VU_CHECK_CONTINUATIONS' else {'1'}):
                 raise ValueError('invalid setting ' + key)
     for v in m['variants']:
         env = d.get('environment', {}) | v.get('environment', {})
+        if 'PS2_VU_CHECK_CONTINUATIONS' in env and env.get('PS2_VU_CHECK') != 'all':
+            raise ValueError('continuation policy requires PS2_VU_CHECK=all')
         if env.get('PS2_WINDOW_FULL') != '1' or 'PS2_GS' not in env:
             raise ValueError('each case requires PS2_WINDOW_FULL=1 and explicit PS2_GS')
     buttons = 'select|l3|r3|start|up|right|down|left|l2|r2|l1|r1|triangle|circle|cross|square'
@@ -183,6 +185,13 @@ def parse_log(text, requested, frames, code):
     missing = re.search(r'missing code at (0x[0-9a-fA-F]+) \(ra (0x[0-9a-fA-F]+)\)', text)
     vu = re.findall(r'^\[vu-check-summary\] sampled (\d+) calls, (\d+) mismatches$', text, re.M)
     chain = re.findall(r'^\[vu-chain-summary\] compared (\d+) chains, (\d+) continuations, (\d+) interpreter fallbacks, (\d+) mismatches, (\d+) nonflag$', text, re.M)
+    outcomes = re.findall(r'^\[vu-chain-outcomes\] attempted (\d+) complete (\d+) mismatch (\d+) budget_exhausted (\d+) unsupported (\d+) unchecked_tail_dispatches (\d+) checkpoints (\d+) continuations (\d+)$', text, re.M)
+    outcome_counts = None
+    if len(outcomes) == 1 and code == 0:
+        values = list(map(int, outcomes[0]))
+        if values[0] == sum(values[1:5]):
+            outcome_counts = dict(zip(('attempted', 'complete_match', 'mismatch', 'budget_exhausted',
+                                      'unsupported', 'unchecked_tail_dispatches', 'checkpoints', 'continuations'), values))
     status = 'incomplete'
     if code != 0:
         status = 'process_failed'
@@ -204,6 +213,10 @@ def parse_log(text, requested, frames, code):
             'comparison_counts': {'sampled_last_observed': int(vu[-1][0]) if vu else None,
                                   'mismatches_last_observed': int(vu[-1][1]) if vu else None,
                                   'checked_final': None, 'skipped': None, 'eligible_total': None},
+            'chain_comparison_outcomes': outcome_counts,
+            'chain_comparison_complete_for_attempted': (bool(outcome_counts['attempted']) and
+                outcome_counts['attempted'] == outcome_counts['complete_match'] and
+                outcome_counts['unchecked_tail_dispatches'] == 0) if outcome_counts is not None else None,
             'chain_comparison_counts': dict(zip(('chains', 'continuations', 'interpreter_fallbacks', 'mismatches', 'nonflag'),
                                                map(int, chain[-1]))) if len(chain) == 1 and code == 0 else None,
             'gs_comparison_counts': [dict(pixels_over_runtime_delta_2=int(a), pixels=int(b), max_channel_delta=int(c))

@@ -238,7 +238,7 @@ def main():
     (d/'tmp').mkdir()
     env = {k: v for k, v in os.environ.items() if not k.startswith('PS2_')}
     env['TMPDIR'] = str(d/'tmp')
-    inputs = [a.runtime.resolve(), a.wgpu.resolve(), Path(__file__), ROOT/'scripts/vu_checkpoint.hpp', ROOT/'runtime/src/vu_micro.cpp', ROOT/'scripts/replay_vu_snapshot.cpp', ROOT/'scripts/replay_vu_checkpoint.cpp']
+    inputs = [a.runtime.resolve(), a.wgpu.resolve(), Path(__file__), ROOT/'scripts/vu_checkpoint.hpp', ROOT/'runtime/src/vu_checkpoint.hpp', ROOT/'runtime/src/vu_micro.cpp', ROOT/'scripts/replay_vu_snapshot.cpp', ROOT/'scripts/replay_vu_checkpoint.cpp']
     (d/'inputs.json').write_text(json.dumps({str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}, indent=2)+'\n')
     def run(*argv):
         commands.append(list(map(str, argv)))

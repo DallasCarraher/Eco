@@ -127,7 +127,7 @@ Each attempt gets a new UUID-suffixed directory. A nonexistent `card.ps2` path
 asks the runtime for a fresh, unformatted card. The runtime may create no card
 file if it never flushes a write. The runner's cwd is the attempt directory, so
 incidental relative runtime files are isolated too. The argv uses absolute ELF,
-ISO, capture, misses and card paths. Only the five allowlisted PS2 settings in
+ISO, capture, misses and card paths. Only the allowlisted PS2 settings in
 the matrix can be configured; all inherited `PS2_*` values are removed.
 
 Native input semantics were checked in `runtime/src/system.cpp`: vblank
@@ -229,3 +229,22 @@ from the legacy sampled observations above. The three-case
 `experiments/jak1-vu-issue4.json` manifest stops at 510 frames. This mode is
 instrumentation, not an acceptance oracle or a replacement for the startup
 matrix.
+
+The [bounded production checker](ISSUE4-VU-CHAIN-INTEGRATION.md) now distinguishes
+`complete_match`, `mismatch`, `budget_exhausted` and `unsupported`. The default
+aggregate comparison budget is still 8,192 continuations; optional
+`PS2_VU_CHECK_CONTINUATIONS=16384` selects that explicit finite policy. The harness
+allows only `8192` or `16384`, and only with `PS2_VU_CHECK=all`. This does not grant
+a fresh shared time/storage budget or schedule a replay.
+
+Comparison stops on budget exhaustion or unsupported boundaries while the guest
+continues normally from compiled state. Its remaining dispatches are explicitly
+unchecked and cannot reset the comparison budget. New `[vu-chain-outcomes]`
+summaries populate `chain_comparison_outcomes`; the independent runtime-stop
+classification remains unchanged. `chain_comparison_complete_for_attempted` is
+true only for nonzero attempts which all matched completely, with no unchecked
+tail. It does not establish hardware correctness or coverage of other executions.
+Historical `[vu-chain-summary]` logs still populate their separate legacy field.
+Failed exits, missing/duplicate summaries and inconsistent outcome totals leave
+new counters unknown, never zero. Compiled fragments require the existing
+subprocess wall-time guard; packet overflow remains a process failure.
