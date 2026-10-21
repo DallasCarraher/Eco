@@ -920,7 +920,19 @@ void run_entry(int unit, std::uint32_t pc) {
                     // then compare with one uninterrupted interpreter invocation.
                     for (unsigned segments = 0; escape >= 0; ++segments) {
                         if (segments >= 8192) {
-                            std::fputs("[vu-check] chain exceeded 8192 segments\n", stderr);
+                            // Preserve a bounded reproducer instead of extending the guard.
+                            const auto dump = [](const char *name, const void *data, std::size_t size) {
+                                std::ofstream(name, std::ios::binary).write(static_cast<const char *>(data), size);
+                            };
+                            std::ofstream("vu-limit-meta.txt") << pc << " " << g_top << " " << g_itop << " -1\n";
+                            dump("vu-limit-code.bin", g_vu1_code, 16384);
+                            dump("vu-limit-before.bin", &before, sizeof before);
+                            dump("vu-limit-memory.bin", before_mem, sizeof before_mem);
+                            dump("vu-limit-pipe.bin", &before_pipe, sizeof before_pipe);
+                            std::fprintf(stderr,
+                                "[vu-check] chain exceeded 8192 segments: frame %llu key %016llX entry %04X chain %llu next %04X issue-clock %u/%u\n",
+                                (unsigned long long)frame_count(), (unsigned long long)key, pc,
+                                (unsigned long long)checked, (unsigned)escape, before_pipe.t, vuops::g_dispatch_flags.t);
                             std::abort();
                         }
                         const auto next = static_cast<std::uint32_t>(escape);
