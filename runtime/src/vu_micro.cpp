@@ -75,6 +75,15 @@ std::uint64_t g_reported = 0;
 bool g_reference_dry = false;
 // Opt-in call-local packet capture, including packets sent by the dry interpreter.
 std::vector<std::uint8_t> *g_check_packets = nullptr;
+// Offline diagnostics can stop one uninterrupted interpreter invocation at an
+// instruction boundary. A checkpoint never flushes Q or resets branch/flag state.
+struct FastCheckpoint {
+    std::uint32_t limit = 0, steps = 0, pc = 0, npc = 0;
+    bool complete = false, ending = false, branch_live = false;
+    std::uint16_t branch_before[16] = {};
+};
+FastCheckpoint *g_fast_checkpoint = nullptr;
+
 
 Unit unit_of(int n) {
     if (n == 0) return Unit{&g_cpu.vu0, g_vu0_code, g_vu0_mem, 4095u, 256u, g_cpu.vu0.tpc};
@@ -1103,7 +1112,22 @@ void run_fast(int n, std::uint32_t address) {
     static const bool record_jumps = std::getenv("PS2_VU_RECORD") != nullptr || static_cast<bool>(g_options.on_vu_program);
     if (count && ++calls % 20000 == 0) std::fprintf(stderr, "[vu1] %llu calls, %llu instructions\n", (unsigned long long)calls, (unsigned long long)total);
     BranchView view;
+    auto *checkpoint = n == 1 ? g_fast_checkpoint : nullptr;
+    const auto checkpoint_at = [&](std::uint32_t steps, bool complete) {
+        if (!checkpoint) return;
+        checkpoint->steps = steps;
+        checkpoint->pc = pc;
+        checkpoint->npc = npc;
+        checkpoint->complete = complete;
+        checkpoint->ending = ending;
+        checkpoint->branch_live = view.live;
+        std::memcpy(checkpoint->branch_before, view.before, sizeof view.before);
+    };
     for (std::uint32_t steps = 0; steps < 1'000'000; ++steps, ++total) {
+        if (checkpoint && checkpoint->limit && steps == checkpoint->limit) {
+            checkpoint_at(steps, false);
+            return;
+        }
         std::uint32_t lo, hi;
         std::memcpy(&lo, u.code + pc, 4);
         std::memcpy(&hi, u.code + pc + 4, 4);
@@ -1152,10 +1176,12 @@ void run_fast(int n, std::uint32_t address) {
         if (ending) {
             pipe.flush_q(r);
             r.tpc = pc;
+            checkpoint_at(steps + 1, true);
             return;
         }
         if (hi & 0x40000000u) ending = true;
     }
+    checkpoint_at(1'000'000, false);
     std::fprintf(stderr, "[vu%d] program at 0x%04X did not end\n", n, address);
 }
 

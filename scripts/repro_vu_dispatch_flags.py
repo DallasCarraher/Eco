@@ -51,6 +51,22 @@ int main(int argc, char **argv) {
             std::ofstream(out/std::format("{}-{}.wasm",kind,part),std::ios::binary).write((char*)wasm.data(),wasm.size());
         }
     }
+    // Original finite loop requiring more than the diagnostic continuation cap.
+    Program loop{0x10007,0,std::vector<std::uint8_t>(16384)};
+    const auto put=[&](unsigned pc,unsigned lo,unsigned hi=0x2FF) {
+        std::memcpy(loop.code.data()+pc,&lo,4);std::memcpy(loop.code.data()+pc+4,&hi,4);
+    };
+    const unsigned nop=0x8000033C;
+    put(0,(0x24u<<25)|(9u<<11));put(8,nop);
+    put(0x80,(0x09u<<25)|(10u<<16)|(10u<<11)|1u);put(0x88,nop);
+    put(0x90,(0x28u<<25)|(10u<<11)|5u);put(0x98,nop);
+    put(0xA0,(0x24u<<25)|(9u<<11));put(0xA8,nop);
+    put(0xC0,nop,0x400002FF);put(0xC8,nop);
+    std::ofstream(out/"code3.bin",std::ios::binary).write((char*)loop.code.data(),loop.code.size());
+    for(unsigned part=0;part<2;++part) {
+        loop.key=0x10007+part;loop.entry=part?0x80:0;
+        std::string name;native<<generate(loop,name);
+    }
     std::ofstream(out/"offsets.json") << std::format("{{\"vi\":{},\"vf\":{},\"rawStatus\":{},\"rawMac\":{},\"rawClip\":{},\"size\":{}}}",offsetof(ps2::Vu0Regs,vi),offsetof(ps2::Vu0Regs,vf),offsetof(ps2::Vu0Regs,status),offsetof(ps2::Vu0Regs,mac),offsetof(ps2::Vu0Regs,clip),sizeof(ps2::Vu0Regs));
     std::ofstream(out/"pipe.json") << std::format("{{\"t\":{},\"mh\":{},\"ts\":{},\"status\":{},\"mac\":{},\"ch\":{},\"clipTs\":{},\"clip\":{},\"size\":{}}}",offsetof(ps2::vuops::FlagPipe,t),offsetof(ps2::vuops::FlagPipe,mh),offsetof(ps2::vuops::FlagPipe,mac_ts),offsetof(ps2::vuops::FlagPipe,status_v),offsetof(ps2::vuops::FlagPipe,mac_v),offsetof(ps2::vuops::FlagPipe,ch),offsetof(ps2::vuops::FlagPipe,clip_ts),offsetof(ps2::vuops::FlagPipe,clip_v),sizeof(ps2::vuops::FlagPipe));
 }
@@ -64,6 +80,8 @@ void vu1_0000000000010003(ps2::Vu0Regs&,std::uint8_t*);
 void vu1_0000000000010004(ps2::Vu0Regs&,std::uint8_t*);
 void vu1_0000000000010005(ps2::Vu0Regs&,std::uint8_t*);
 void vu1_0000000000010006(ps2::Vu0Regs&,std::uint8_t*);
+void vu1_0000000000010007(ps2::Vu0Regs&,std::uint8_t*);
+void vu1_0000000000010008(ps2::Vu0Regs&,std::uint8_t*);
 int main(int argc,char **argv) {
  using namespace ps2;
  if(argc!=4 || !std::ifstream(argv[1],std::ios::binary).read((char*)g_vu1_code,16384)) return 2;
@@ -99,6 +117,43 @@ int main(int argc,char **argv) {
   std::memcpy(g_vu0_code,g_vu1_code,4096);vu::code_changed(0);
   vu::run_fast(0,0x80);
   if(std::memcmp(&saved,&vuops::g_dispatch_flags,sizeof saved)) return 1;
+ }
+ if(kind==0) {
+  const auto input=std::filesystem::path(argv[1]).parent_path()/"code3.bin";
+  if(!std::ifstream(input,std::ios::binary).read((char*)g_vu1_code,16384)) return 2;
+  vu::code_changed(1);
+  const auto init_loop=[] {vu::reset();std::memset(g_vu1_mem,0,16384);vu::regs(1).vi[9]=0x10;vu::regs(1).vi[10]=10000;};
+  Vu0Regs compiled;std::uint32_t issued;
+  init_loop();
+  {
+   vuops::FlagDispatch scope(vu::regs(1));std::int64_t escape=-1;vu::g_capture=&escape;
+   vu1_0000000000010007(vu::regs(1),g_vu1_mem);
+   for(unsigned n=0;n<8192;++n) {if(escape!=0x80){std::cerr<<"loop escape "<<escape<<" at "<<n<<"\n";return 1;}escape=-1;vu1_0000000000010008(vu::regs(1),g_vu1_mem);}
+   vu::g_capture=nullptr;std::memcpy(&compiled,&vu::regs(1),sizeof compiled);issued=vuops::g_dispatch_flags.t-16;
+   if(escape!=0x80 || compiled.vi[10]!=1808 || issued!=49154) {std::cerr<<"compiled loop checkpoint: escape "<<escape<<" counter "<<compiled.vi[10]<<" issued "<<issued<<"\n";return 1;}
+  }
+  init_loop();
+  {
+   vuops::FlagDispatch scope(vu::regs(1));vu::FastCheckpoint point;point.limit=issued;vu::g_fast_checkpoint=&point;
+   vu::run_fast(1,0);vu::g_fast_checkpoint=nullptr;
+   if(point.complete || point.steps!=issued || point.pc!=0x80 || point.npc!=0x88 || point.ending || !point.branch_live || point.branch_before[10]!=1808 ||
+      std::memcmp(&compiled,&vu::regs(1),sizeof compiled)) {for(unsigned k=0;k<sizeof compiled/4;++k){std::uint32_t a,b;std::memcpy(&a,(char*)&compiled+4*k,4);std::memcpy(&b,(char*)&vu::regs(1)+4*k,4);if(a!=b)std::cerr<<"reg word "<<k<<": "<<a<<"/"<<b<<"\n";}std::cerr<<"interpreter checkpoint: complete "<<point.complete<<" steps "<<point.steps<<" pc "<<point.pc<<" npc "<<point.npc<<" counter "<<vu::regs(1).vi[10]<<"\n";return 1;}
+  }
+  init_loop();vu::FastCheckpoint full;vu::g_fast_checkpoint=&full;vu::run_fast(1,0);vu::g_fast_checkpoint=nullptr;
+  if(!full.complete || full.steps!=60002 || vu::regs(1).vi[10]!=0) {std::cerr<<"interpreter full loop: "<<full.complete<<" counter "<<vu::regs(1).vi[10]<<" steps "<<full.steps<<"\n";return 1;}
+  // A checkpoint after DIV must preserve pending Q rather than flush it.
+  std::memset(g_vu1_code,0,16384);
+  const unsigned divide=(0x40u<<25)|(2u<<16)|(1u<<11)|(14u<<6)|0x3Cu,unop=0x2FF;
+  std::memcpy(g_vu1_code,&divide,4);std::memcpy(g_vu1_code+4,&unop,4);
+  vu::code_changed(1);init();vu::regs(1).q=0x3F800000;
+  {
+   vuops::FlagDispatch scope(vu::regs(1));vu::FastCheckpoint point;point.limit=1;vu::g_fast_checkpoint=&point;
+   vu::run_fast(1,0);vu::g_fast_checkpoint=nullptr;
+   const auto &pipe=vuops::g_dispatch_flags;
+   if(point.complete || point.pc!=8 || point.npc!=16 || point.steps!=1 || !pipe.q_pending ||
+      pipe.q_value!=0x3F000000 || vu::regs(1).q!=0x3F800000) return 1;
+  }
+  std::cout<<"finite 10000-iteration loop: 8192-continuation prefix aligned at 49154 instructions; uninterrupted interpreter completes\n";
  }
  std::cout<<(fallback?"compiled -> interpreter":"compiled -> compiled")
           <<" flag kind "<<kind<<": 128 delayed reads, fresh invocation, reset, VU0 isolation passed\n";

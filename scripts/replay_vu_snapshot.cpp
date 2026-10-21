@@ -5,13 +5,32 @@
 #include <iostream>
 void register_generated_vu();
 int main(int argc, char **argv) {
-    if (argc != 4 || (std::string(argv[2]) != "compiled" && std::string(argv[2]) != "interpreted")) {
-        std::fputs("usage: replay_vu_snapshot <snapshot-prefix> <compiled|interpreted> <output-prefix>\n", stderr);
+    if (argc < 4 || argc > 5) {
+        std::fputs("usage: replay_vu_snapshot <input-prefix> <compiled|interpreted|compiled-prefix|interpreted-prefix> <output-prefix> [prefix-limit]\n", stderr);
         return 2;
     }
-    const std::string prefix = argv[1];
+    const std::string prefix = argv[1], mode = argv[2], output = argv[3];
+    const bool compiled = mode == "compiled" || mode == "compiled-prefix";
+    if ((!compiled && mode != "interpreted" && mode != "interpreted-prefix") ||
+        (mode == "interpreted-prefix" && argc != 5) ||
+        (argc == 5 && mode != "compiled-prefix" && mode != "interpreted-prefix")) return 2;
+    unsigned continuation_limit = 8192;
+    ps2::vu::FastCheckpoint checkpoint;
+    if (argc == 5) {
+        char *end = nullptr;
+        const auto value = std::strtoul(argv[4], &end, 10);
+        if (!end || *end || !value || value >= 1'000'000) return 2;
+        if (mode == "compiled-prefix") {
+            if (value > 8192) return 2;
+            continuation_limit = static_cast<unsigned>(value);
+        } else checkpoint.limit = static_cast<std::uint32_t>(value);
+    }
     const auto load = [&](const char *suffix, void *dst, std::size_t size) {
         if (!std::ifstream(prefix + suffix, std::ios::binary).read(static_cast<char *>(dst), size)) std::abort();
+    };
+    const auto dump = [&](const char *suffix, const void *data, std::size_t size) {
+        std::ofstream file(output + suffix, std::ios::binary);
+        if (!file || (size && !file.write(static_cast<const char *>(data), size))) std::abort();
     };
     ps2::vu::reset();
     load("-code.bin", ps2::g_vu1_code, 16384);
@@ -27,27 +46,53 @@ int main(int argc, char **argv) {
     ps2::vu::g_check_packets = &packets;
     ps2::vu::g_reference_dry = true;
     ps2::vuops::FlagDispatch flags(ps2::vu::regs(1));
-    // Older root snapshots predate persistent flag history and start fresh.
     if (std::filesystem::exists(prefix + "-pipe.bin"))
         load("-pipe.bin", &ps2::vuops::g_dispatch_flags, sizeof(ps2::vuops::FlagPipe));
-    if (std::string(argv[2]) == "compiled") {
+    const auto initial_clock = ps2::vuops::g_dispatch_flags.t;
+    unsigned continuations = 0;
+    bool complete = false;
+    std::string reason;
+    if (compiled) {
         auto fn = ps2::vu::lookup(pc);
         if (!fn) return 3;
         ps2::vu::g_capture = &actual_escape;
         fn(ps2::vu::regs(1), ps2::g_vu1_mem);
-        for (unsigned segments=0; actual_escape>=0; ++segments) {
-            if (segments>=8192) return 4;
-            const auto next=static_cast<std::uint32_t>(actual_escape);
-            actual_escape=-1;
-            if (auto fn=ps2::vu::lookup(next)) fn(ps2::vu::regs(1),ps2::g_vu1_mem);
-            else ps2::vu::run_fast(1,next);
+        while (actual_escape >= 0 && continuations < continuation_limit) {
+            const auto next = static_cast<std::uint32_t>(actual_escape);
+            actual_escape = -1;
+            if (auto continuation = ps2::vu::lookup(next)) continuation(ps2::vu::regs(1), ps2::g_vu1_mem);
+            else ps2::vu::run_fast(1, next);
+            ++continuations;
         }
         ps2::vu::g_capture = nullptr;
+        complete = actual_escape < 0;
+        reason = complete ? "complete" : "continuation_limit";
+        pc = complete ? ps2::vu::regs(1).tpc : static_cast<unsigned>(actual_escape);
     } else {
+        ps2::vu::g_fast_checkpoint = &checkpoint;
         ps2::vu::run_fast(1, pc);
+        ps2::vu::g_fast_checkpoint = nullptr;
+        complete = checkpoint.complete;
+        reason = complete ? "complete" : checkpoint.steps == checkpoint.limit ? "instruction_checkpoint" : "instruction_limit";
+        pc = checkpoint.pc;
+        dump("-branch.bin", &checkpoint, sizeof checkpoint);
     }
-    std::cerr << "escape " << actual_escape << " expected " << expected_escape << "\n";
-    std::ofstream(std::string(argv[3])+"-regs.bin", std::ios::binary).write(reinterpret_cast<char *>(&ps2::vu::regs(1)), sizeof(ps2::Vu0Regs));
-    std::ofstream(std::string(argv[3])+"-mem.bin", std::ios::binary).write(reinterpret_cast<char *>(ps2::g_vu1_mem), 16384);
-    std::ofstream(std::string(argv[3])+"-packets.bin", std::ios::binary).write(reinterpret_cast<char *>(packets.data()), packets.size());
+    const auto &pipe = ps2::vuops::g_dispatch_flags;
+    dump("-regs.bin", &ps2::vu::regs(1), sizeof(ps2::Vu0Regs));
+    dump("-mem.bin", ps2::g_vu1_mem, 16384);
+    dump("-packets.bin", packets.data(), packets.size());
+    dump("-pipe.bin", &pipe, sizeof pipe);
+    // Text fields exclude padding from the semantic pipeline comparison.
+    std::ofstream semantic(output + "-pipe.txt");
+    semantic << pipe.t << ' ' << pipe.mh << ' ' << pipe.ch << ' ' << pipe.q_pending << ' ' << pipe.q_value << ' ' << pipe.q_ready << '\n';
+    for (unsigned i=0;i<8;++i)
+        semantic << pipe.mac_ts[i] << ' ' << pipe.mac_v[i] << ' ' << pipe.status_v[i] << ' ' << pipe.clip_ts[i] << ' ' << pipe.clip_v[i] << '\n';
+    std::ofstream status(output + "-status.json");
+    status << "{\"complete\":" << (complete ? "true" : "false") << ",\"reason\":\"" << reason
+           << "\",\"next_pc\":" << pc << ",\"issue_clock_delta\":" << pipe.t-initial_clock
+           << ",\"continuations\":" << continuations << ",\"steps\":" << checkpoint.steps
+           << ",\"npc\":" << checkpoint.npc << ",\"ending\":" << (checkpoint.ending ? "true" : "false") << "}\n";
+    std::cerr << reason << ": next PC " << pc << ", issued " << pipe.t-initial_clock << '\n';
+    // Exit 4 is a preserved partial observation, never full-invocation agreement.
+    return complete ? 0 : 4;
 }
