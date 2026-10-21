@@ -147,3 +147,71 @@ are `local/issue4-prefix/{q-after,flags-q,codegen-q,wrapper-q}.txt`.
 The Wasm synthetic isolates generated-module prologue ownership; it is not a
 browser or production-import integration replay. No browser parity or GS
 changes are part of this investigation.
+
+## Corrected prefix result and stopping point
+
+The corrected measurement at clean revision `bf411f9` stops at the same PC
+`1280`, issue delta 113,104, and unchanged 8,192-continuation budget. Registers,
+memory, packets and every serialized pipe field now match exactly. The
+continuous interpreter's four compared output files are unchanged from the
+pre-Q-fix prefix. Compiled Q now retains `BE0F0ABF`, pending=true, ready at
+113,123 with current clock 113,120. No tolerance or expected output changed.
+Compiled/interpreted subprocess times are 0.3534/0.0639 seconds; the preceding
+pair took 0.3353/0.0615 seconds. Both reports explicitly record
+`full_invocation_compared: false`; exit 0 from the wrapper means exact endpoint
+agreement, not completion of the invocation.
+
+Artifacts in this isolated checkout:
+
+- `local/experiments/issue4-prefix-8192/`: pre-fix mismatch, identities, exact
+  commands, partial statuses, registers, pipe, memory and packet outputs.
+- `local/experiments/issue4-prefix-q-fixed-8192/`: corrected exact prefix.
+- `local/issue4-prefix/q-fixed/`: private VU-only generated code, objects and
+  standalone binary. `build.json` records every exact build argv and SHA-256
+  of each read-only archive; `local/issue4-prefix/build-q.txt` is its build log.
+- `local/issue4-prefix/final-validation.json`: unchanged snapshot hashes,
+  preserved generated inventory and baseline replayer hashes, interpreter
+  output identity, final comparison and disk accounting.
+
+The new standalone tool links newly generated VU objects before the preserved
+EE/runtime archives; `replay_vu_snapshot.cpp` directly includes the current
+interpreter. No preserved build or generated directory was rebuilt. The
+original checkout is clean, and the completed overnight batch was never a
+write target. Final retained build/generated/local size is 1,809,095,082 bytes
+(about 1.69 GiB); free disk is about 28.1 GiB. This cycle adds less than one
+second of measured game-derived prefix subprocess time, remaining well below
+the cumulative four-hour limit. No subprocess limit was expanded.
+
+Exact validation commands (run from the isolated checkout; always choose a
+new experiment output directory):
+
+```sh
+python3 scripts/repro_vu_dispatch_q.py
+python3 scripts/repro_vu_dispatch_flags.py
+python3 scripts/test_vu_codegen.py
+python3 -m unittest discover -s scripts -p test_run_vu_prefix.py -v
+python3 scripts/run_vu_prefix.py \
+  --snapshot local/experiments/issue4-flags-check-validation-510/boot-idle--vu-chain-check--1--f29ec88a2acf/vu-limit \
+  --runner local/issue4-prefix/q-fixed/replay \
+  --generated local/issue4-prefix/q-fixed/generated \
+  --output local/experiments/issue4-prefix-q-fixed-repeat
+```
+
+This closes one further bounded investigation/validation cycle. It establishes
+a Q pipeline handoff bug and removes the observed state discrepancy in the
+saved prefix. It does not prove the full invocation or any image changed as a
+result of this Q fix. The previous flag-history fix removed the measured CPU
+frame-500/505/510 image gap; the individual sampled call-172 flags mismatch
+still has not been uniquely linked to those pixels. Graphics-backend effects
+remain separate and unmeasured here. No visual/PS2 correctness or gameplay
+compatibility conclusion follows from path agreement.
+
+A further focused validation is justified before broadening claims: build a
+new private runner with this Q correction, then use `scripts/run_experiments.py`
+for just boot-idle CPU compiled/interpreted through frame 510 with the existing
+capture checkpoints. This would measure whether pending-Q preservation changes
+any observed image while checking the earlier image agreement still holds.
+It needs a disk-budget check before making another full build. The precise
+remaining whole-chain coverage blocker is the invocation exceeding 8,192
+continuations; this prefix experiment does not remove it. Do not increase the
+guard or claim exhaustive agreement from this report.
