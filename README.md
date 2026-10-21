@@ -3,6 +3,11 @@
 An experimental effort to run **Jak and Daxter: The Precursor Legacy** in a
 browser using WebAssembly and WebGPU.
 
+See the [roadmap](docs/ROADMAP.md), [agent work queue](docs/work-items/README.md),
+and [Mac mini overnight runbook](docs/OVERNIGHT.md) for the next milestones.
+The [deterministic experiment matrix](experiments/jak1-startup.json) is a
+specification; its unattended runner is tracked in GitHub issue #1.
+
 **Status: browser prototype; not playable yet.** The supplied USA Rev 1 disc
 boots in Chrome, displays the Sony startup screen, and enters animated 3D
 rendering. Geometry is visibly distorted and unexplored code paths can halt.

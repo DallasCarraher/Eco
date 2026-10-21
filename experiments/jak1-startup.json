@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "status": "specification_pending_runner",
+  "name": "jak1-startup-isolation",
+  "game": {"serial": "SCUS_971.24", "revision": "USA Rev 1"},
+  "defaults": {
+    "frames": 600,
+    "frame_every": 30,
+    "repetitions": 2,
+    "case_timeout_seconds": 900,
+    "total_timeout_seconds": 14400,
+    "max_output_bytes": 2147483648,
+    "min_free_disk_bytes": 10737418240,
+    "concurrency": 1,
+    "environment": {"PS2_WINDOW_FULL": "1"},
+    "initial_memory_card": "fresh_per_case"
+  },
+  "scenarios": [
+    {"id": "boot-idle", "presses": []},
+    {"id": "boot-start", "presses": ["300:start:2"]}
+  ],
+  "variants": [
+    {"id": "gpu-compiled", "environment": {"PS2_GS": "gpu"}},
+    {"id": "cpu-compiled", "environment": {"PS2_GS": "cpu"}},
+    {"id": "gpu-interpreted", "environment": {"PS2_GS": "gpu", "PS2_VU_INTERPRET": "1"}},
+    {"id": "cpu-interpreted", "environment": {"PS2_GS": "cpu", "PS2_VU_INTERPRET": "1"}},
+    {"id": "gs-mirror", "environment": {"PS2_GS": "both", "PS2_GS_COMPARE": "1"}},
+    {"id": "vu-sampled-check", "environment": {"PS2_GS": "cpu", "PS2_VU_CHECK": "1"}}
+  ],
+  "acceptance": {
+    "runtime_completion": "explicit_frame_limit_reached",
+    "visual_correctness": "requires_reference_review",
+    "gameplay_verified": false
+  }
+}
