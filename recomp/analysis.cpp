@@ -67,6 +67,11 @@ private:
         while (valid_target(pc) && !p_.is_code(pc)) {
             const Insn insn = decode(*image_.word(pc), pc);
             if (insn.op == Op::Invalid) return;
+            // A captured heap page may end between a branch and its delay
+            // slot. Leave that branch untranslated so exploration reports a
+            // miss and can capture the following page, rather than emitting
+            // a permanent "unsupported delay slot" halt for valid game code.
+            if (has_delay_slot(insn.op) && !valid_target(pc + 4)) return;
             mark(pc);
             const Flow f = flow(insn.op);
             if (f == Flow::Stop) return;
@@ -197,7 +202,7 @@ std::vector<std::uint32_t> frame_starts(const Image &image, std::uint32_t begin,
 
 }
 
-Program analyse(const Image &image, const std::vector<std::uint32_t> &extra_entries, const std::set<std::uint32_t> &dynamic) {
+Program analyse(const Image &image, const std::vector<std::uint32_t> &extra_entries, const std::set<std::uint32_t> &dynamic, bool discover) {
     Program p;
     p.dynamic = dynamic;
     p.base = UINT32_MAX;
@@ -214,6 +219,12 @@ Program analyse(const Image &image, const std::vector<std::uint32_t> &extra_entr
     for (const auto &[address, name] : image.symbols()) explorer.strong(address, true);
     for (std::uint32_t address : extra_entries) explorer.strong(address, true);
     explorer.drain();
+
+    // Heap snapshots interleave code with mutable objects. Guessing extra
+    // functions from arbitrary pointer-looking data makes those objects part
+    // of the code signature and invalidates it whenever the game writes data.
+    // Callers with observed or type-tagged entries can request flow-only code.
+    if (!discover) return p;
 
     std::uint32_t text_begin = p.end, text_end = p.base;
     for (std::uint32_t pc = p.base; pc < p.end; pc += 4) {

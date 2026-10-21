@@ -56,7 +56,9 @@ def goal_function_entries(ram):
             at = ram.find(needle, at, RAM_SIZE - 4)
             if at < 0:
                 break
-            if at % 16 == 0 and at >= 0x10000:
+            # Retail Jak 1 function headers can be 8-byte aligned (including
+            # addresses ending in 8), rather than OpenGOAL's 16-byte layout.
+            if at % 8 == 0 and at >= 0x10000:
                 entries.add(at + 4)
             at += 1
     return sorted(entries)
@@ -78,10 +80,10 @@ def capture(elf, ram, out, misses, goal_functions=False):
             name = token.split(':', 1)[0]
             if not match or not (out / (name + '.bin')).is_file():
                 continue
-            if (out / (name + '.bin')).stat().st_size != UNIT:
+            if (out / (name + '.bin')).stat().st_size not in (UNIT, 2 * UNIT):
                 continue
             offset = int(match[2], 16)
-            if offset >= UNIT:
+            if offset >= (out / (name + '.bin')).stat().st_size:
                 continue
             pc = int(match[1], 16) + offset
         else:
@@ -91,7 +93,9 @@ def capture(elf, ram, out, misses, goal_functions=False):
         if any(lo <= pc < hi for lo, hi in segments):
             continue
         base = pc & ~(UNIT - 1)
-        blob = ram[base:base + UNIT]
+        # Include the next page: a function or its branch delay slot can
+        # cross the 16 KiB translation boundary.
+        blob = ram[base:min(base + 2 * UNIT, RAM_SIZE)]
         if not any(blob):
             continue
         stem = f'{base:08X}_{binascii.crc32(blob) & 0xffffffff:08X}'

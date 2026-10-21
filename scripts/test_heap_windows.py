@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from heap_windows import RAM_SIZE, capture, goal_function_entries
+from goal_toplevels import templates
 
 
 class HeapCaptureTests(unittest.TestCase):
@@ -33,7 +34,7 @@ class HeapCaptureTests(unittest.TestCase):
         self.assertEqual(self.run_capture(), 1)
         files = list(self.out.glob('*.bin'))
         self.assertEqual(len(files), 1)
-        self.assertEqual(files[0].read_bytes(), self.ram[0x180000:0x184000])
+        self.assertEqual(files[0].read_bytes(), self.ram[0x180000:0x188000])
         self.assertEqual(self.misses.read_text(), files[0].stem + ':8\n')
         # Re-observing the same page must reuse the snapshot.
         self.misses.write_text('180008\n')
@@ -81,9 +82,21 @@ class HeapCaptureTests(unittest.TestCase):
         struct.pack_into('<I', self.ram, symbol, tag)
         struct.pack_into('<I', self.ram, tag, symbol)
         struct.pack_into('<I', self.ram, 0x180000, tag)
-        self.assertEqual(goal_function_entries(self.ram), [0x180004])
+        struct.pack_into('<I', self.ram, 0x180018, tag)
+        self.assertEqual(goal_function_entries(self.ram), [0x180004, 0x18001c])
         struct.pack_into('<I', self.ram, tag, 0)
         self.assertEqual(goal_function_entries(self.ram), [])
+
+    def test_v3_top_level_template_bounds_and_alignment(self):
+        code = struct.pack('<5I', 0, 0x24030000, 0xc, 0x1000ffff, 0)
+        body = bytearray(128)
+        struct.pack_into('<4I', body, 0, 0, 128, 3, 3)
+        struct.pack_into('<4I', body, 112, 0, 0, len(code), 0)
+        body.extend(code)
+        archive = struct.pack('<I60xI60x', 1, len(body)) + body
+        self.assertEqual(list(templates(archive, 0x180000)), [(0x17ffe0, code)])
+        with self.assertRaisesRegex(ValueError, 'truncated object body'):
+            list(templates(archive[:-1], 0x180000))
 
 
 if __name__ == '__main__':

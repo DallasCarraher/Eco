@@ -420,6 +420,9 @@ int run() {
         if (c.budget <= 0) refill(c);
         dispatch(c, 0, 0);
     }
+    // Early boot failures often precede the periodic screenshot interval.
+    // Keep the final display, if initialized, alongside the halt diagnostics.
+    if (!g_options.frames_dir.empty()) dump_frame();
     kernel::dump();
     iop::dump();
     sif::dump();

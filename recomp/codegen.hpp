@@ -33,6 +33,8 @@ struct Translation {
     // occupies.
     bool fixed_module{};
     std::uint32_t fixed_base{};
+    std::vector<std::uint32_t> check_masks{};
+    bool entry_relative{};
 };
 
 void generate(const std::vector<Translation> &translations, const CodegenOptions &options);

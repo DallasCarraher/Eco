@@ -72,10 +72,11 @@ Image Image::load(const std::string &path) {
     return image;
 }
 
-Image Image::raw(std::uint32_t address, std::vector<std::uint8_t> bytes, std::pair<std::uint32_t, std::uint32_t> text) {
+Image Image::raw(std::uint32_t address, std::vector<std::uint8_t> bytes, std::pair<std::uint32_t, std::uint32_t> text, std::uint32_t entry) {
     Image image;
     image.segments_.push_back(Segment{address, std::move(bytes), true});
     image.text_ = text;
+    image.entry_ = entry;
     return image;
 }
 

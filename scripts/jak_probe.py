@@ -20,10 +20,12 @@ def main():
     parser.add_argument('--web', action='store_true', help='also build WASM (implies --run)')
     parser.add_argument('--capture-heap', action='store_true', help='experimental fixed-address heap code snapshots')
     parser.add_argument('--goal-functions', action='store_true', help='also seed linked Jak 1 function objects (implies --capture-heap)')
+    parser.add_argument('--toplevel-templates', action='store_true', help='USA Rev 1 experiment: precompile initialization routines (implies --goal-functions)')
     parser.add_argument('--rounds', type=int, default=2)
     parser.add_argument('--frames', type=int, default=600)
     parser.add_argument('--timeout', type=int, default=900, help='total build/run timeout in seconds')
     args = parser.parse_args()
+    args.goal_functions = args.goal_functions or args.toplevel_templates
     args.capture_heap = args.capture_heap or args.goal_functions
     iso = args.iso.expanduser().resolve(strict=True)
     if not iso.is_file() or min(args.timeout, args.rounds, args.frames) <= 0:
@@ -52,6 +54,7 @@ def main():
                   'status': 'disc_inspected', 'gameplay_verified': False,
                   'capture_heap': args.capture_heap, 'rounds': args.rounds,
                   'goal_functions': args.goal_functions,
+                  'toplevel_templates': args.toplevel_templates,
                   'frames_per_round': args.frames}
     finally:
         image.file.close()
@@ -62,6 +65,9 @@ def main():
     print(json.dumps(report, indent=2), flush=True)
     if not (args.run or args.web):
         return
+    if args.toplevel_templates:
+        subprocess.run([sys.executable, str(ROOT / 'scripts/goal_toplevels.py'),
+                        str(iso), str(out / 'overlays')], cwd=ROOT, check=True, timeout=120)
     linked = out / 'disc.iso'
     if os.path.lexists(linked) and linked.resolve() != iso:
         parser.error('games/jak1/disc.iso already points at another image; use a fresh workspace')

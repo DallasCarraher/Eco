@@ -34,11 +34,13 @@ std::vector<Instance> g_instances;
 bool loaded_at(const ModuleInfo &m, std::uint32_t base) {
     if (m.fixed_base) {
         if (base != m.fixed_base) return false;
-    } else if (ld32(base + 0x2Cu) != m.size) {
+    } else if (!m.entry_relative && ld32(base + 0x2Cu) != m.size) {
         return false;
     }
-    for (std::uint32_t k = 0; k < m.check_count; ++k)
-        if (ld32(base + m.checks[2 * k]) != m.checks[2 * k + 1]) return false;
+    for (std::uint32_t k = 0; k < m.check_count; ++k) {
+        const std::uint32_t mask = m.check_masks ? m.check_masks[k] : 0xFFFFFFFFu;
+        if ((ld32(base + m.checks[2 * k]) & mask) != (m.checks[2 * k + 1] & mask)) return false;
+    }
     return true;
 }
 
@@ -52,7 +54,8 @@ const Instance *in_place(const Instance &i) {
     if (full || !i.module->fixed_base) return loaded_at(*i.module, i.base) ? &i : nullptr;
     if (!i.module->check_count) return &i;
     const std::uint32_t c = g_spot_cursor++ % i.module->check_count;
-    return ld32(i.base + i.module->checks[2 * c]) == i.module->checks[2 * c + 1] ? &i : nullptr;
+    const std::uint32_t mask = i.module->check_masks ? i.module->check_masks[c] : 0xFFFFFFFFu;
+    return (ld32(i.base + i.module->checks[2 * c]) & mask) == (i.module->checks[2 * c + 1] & mask) ? &i : nullptr;
 }
 
 Instance make_instance(std::uint32_t base, const ModuleInfo *m) {
@@ -87,6 +90,20 @@ const Instance *instance_for(std::uint32_t pc, bool require_entry = false) {
             (!require_entry || answers(m, pc - m.fixed_base)) && loaded_at(m, m.fixed_base)) {
             g_instances.push_back(make_instance(m.fixed_base, &m));
             return &g_instances.back();
+        }
+    }
+    // GOAL initialization functions have a type word followed by their entry
+    // at +4. Match the compiled instruction structure at the actual call site;
+    // patched immediates are read live by the generated code.
+    if (pc >= 4) {
+        const std::uint32_t base = pc - 4;
+        for (std::uint32_t k = 0; k < g_module_count; ++k) {
+            const ModuleInfo &m = g_modules[k];
+            if (!m.entry_relative || m.size > kRamSize - base || !answers(m, 4)) continue;
+            if (loaded_at(m, base)) {
+                g_instances.push_back(make_instance(base, &m));
+                return &g_instances.back();
+            }
         }
     }
     for (std::uint32_t at = pc & ~15u; pc - at < g_module_span; at -= 16) {

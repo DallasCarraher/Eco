@@ -33,6 +33,11 @@ struct ModuleInfo {
     std::uint32_t check_count;
     const UnitInfo *units;
     std::uint32_t count;
+    // Optional masks for checks whose instruction immediates are read from
+    // live memory after GOAL linking. Null means exact 32-bit comparisons.
+    const std::uint32_t *check_masks{};
+    // GOAL top-level templates enter at offset 4 and can occupy any heap.
+    bool entry_relative{};
 };
 
 void register_units(const UnitInfo *units, std::uint32_t count);

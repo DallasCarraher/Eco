@@ -29,6 +29,7 @@ struct Snr2Module {
     std::uint32_t code_end{};
     Links links;
     std::vector<std::uint32_t> seeds;
+    bool live_immediates{};
 };
 
 std::optional<Snr2Module> read_snr2_module(std::vector<std::uint8_t> bytes);

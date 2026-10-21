@@ -29,6 +29,8 @@ if(NOT EMSCRIPTEN)
 
     add_executable(dispatch_snapshot_test scripts/test_dispatch_snapshots.cpp runtime/src/dispatch.cpp)
     target_include_directories(dispatch_snapshot_test PRIVATE runtime/include)
+    add_executable(analysis_boundary_test scripts/test_analysis_boundary.cpp recomp/analysis.cpp recomp/elf.cpp recomp/r5900.cpp)
+    target_include_directories(analysis_boundary_test PRIVATE recomp)
 endif()
 
 add_library(ps2runtime STATIC

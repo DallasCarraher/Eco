@@ -94,6 +94,8 @@ std::vector<Snr2Module> read_modules(const std::string &dir) {
 // with no file contents. The pipeline captures what the game unpacks into it
 // as files named <base>_<name>.bin, one content per file, and this reads them
 // all as images of the one window, each a module to translate for that base.
+// An opt-in .live16 sidecar marks a pre-link GOAL top-level template: supported
+// instruction immediates are read live after linking instead of baked in.
 std::vector<Snr2Module> read_overlays(const std::string &dir) {
     std::vector<Snr2Module> overlays;
     for (const auto &path : std::filesystem::directory_iterator(dir)) {
@@ -106,12 +108,33 @@ std::vector<Snr2Module> read_overlays(const std::string &dir) {
         Snr2Module o;
         std::ifstream file(path.path(), std::ios::binary);
         o.bytes = std::vector<std::uint8_t>{std::istreambuf_iterator<char>(file), {}};
-        if (o.bytes.size() < 0x400u || o.bytes.size() & 3u) continue;
+        o.live_immediates = std::filesystem::exists(path.path().parent_path() / (stem + ".live16"));
+        if (o.bytes.size() < (o.live_immediates ? 8u : 0x400u) || o.bytes.size() & 3u) continue;
         o.size = static_cast<std::uint32_t>(o.bytes.size());
         o.base = static_cast<std::uint32_t>(std::stoul(base, nullptr, 16));
         o.code_begin = 0;
         o.code_end = o.size;
         o.name = stem;
+        if (o.live_immediates) {
+            o.seeds.push_back(o.base + 4);
+            for (std::uint32_t at = 0; at + 4 <= o.size; at += 4) {
+                std::uint32_t word = 0;
+                std::memcpy(&word, o.bytes.data() + at, 4);
+                const Op op = decode(word, o.base + at).op;
+                switch (op) {
+                case Op::Addi: case Op::Addiu: case Op::Andi: case Op::Ori: case Op::Xori: case Op::Lui:
+                case Op::Daddi: case Op::Daddiu: case Op::Ldl: case Op::Ldr: case Op::Lq: case Op::Sq:
+                case Op::Lb: case Op::Lh: case Op::Lwl: case Op::Lw: case Op::Lbu: case Op::Lhu:
+                case Op::Lwr: case Op::Lwu: case Op::Sb: case Op::Sh: case Op::Swl: case Op::Sw:
+                case Op::Sdl: case Op::Sdr: case Op::Swr: case Op::Lwc1: case Op::Lqc2: case Op::Ld:
+                case Op::Swc1: case Op::Sqc2: case Op::Sd:
+                    o.links[o.base + at] = Link{Fix::Low, true, 0}; break;
+                case Op::J: case Op::Jal:
+                    o.links[o.base + at] = Link{Fix::Jump, true, 0}; break;
+                default: break;
+                }
+            }
+        }
         if (std::any_of(overlays.begin(), overlays.end(), [&](const Snr2Module &m) { return m.base == o.base && m.bytes == o.bytes; })) continue;
         overlays.push_back(std::move(o));
     }
@@ -223,10 +246,18 @@ int main(int argc, char **argv) {
                 for (const std::uint32_t entry : it->second) window_tokens[o.base].insert(entry);
         }
         for (const Snr2Module &o : overlays) {
-            Image candidate = Image::raw(o.base, o.bytes, {0, o.size});
+            if (o.live_immediates) {
+                variant_of[o.name] = o.name;
+                representatives.insert(o.name);
+                if (const auto it = entries.modules.find(o.name); it != entries.modules.end())
+                    for (const auto entry : it->second) window_offsets[o.name].insert(entry);
+                continue;
+            }
+            Image candidate = Image::raw(o.base, o.bytes, {o.base, o.base + o.size});
             std::vector<std::uint32_t> seeds = window_seeds[o.base];
+            seeds.insert(seeds.end(), o.seeds.begin(), o.seeds.end());
             for (const std::uint32_t entry : window_tokens[o.base]) seeds.push_back(o.base + entry);
-            const Program signature_program = analyse(candidate, seeds, {});
+            const Program signature_program = analyse(candidate, seeds, {}, false);
             std::vector<std::pair<std::uint32_t, std::uint32_t>> signature;
             for (std::uint32_t at = 0; at + 4 <= o.size; at += 4)
                 if (signature_program.is_code(o.base + at)) {
@@ -247,15 +278,26 @@ int main(int argc, char **argv) {
         }
         for (const Snr2Module &o : overlays) {
             if (!representatives.count(o.name)) continue;
-            images.push_back(Image::raw(o.base, o.bytes, {0, o.size}));
+            const bool portable = o.live_immediates && o.base == 0;
+            images.push_back(Image::raw(o.base, o.bytes, {o.base, o.base + o.size}, portable ? 4 : 0));
             std::vector<std::uint32_t> seeds = window_seeds[o.base];
+            seeds.insert(seeds.end(), o.seeds.begin(), o.seeds.end());
             // Entry tokens name module positions, and unlike a relocatable
             // module this image occupies a real address.
             for (const std::uint32_t entry : window_offsets[o.name]) seeds.push_back(o.base + entry);
-            programs.push_back(analyse(images.back(), seeds, {}));
+            programs.push_back(analyse(images.back(), seeds, dynamic_sites(o.links), false));
             overlay_code += code_size(programs.back());
-            translations.push_back({&images.back(), &programs.back(), nullptr, "m_" + o.name + "_", false, o.name, o.size,
-                                    checks_for_window(o, programs.back()), true, o.base});
+            translations.push_back({&images.back(), &programs.back(), o.live_immediates ? &o.links : nullptr, "m_" + o.name + "_", portable, o.name, o.size,
+                                    checks_for_window(o, programs.back()), !portable, o.base});
+            translations.back().entry_relative = portable;
+            if (o.live_immediates) {
+                for (const auto &[at, value] : translations.back().checks) {
+                    (void)value;
+                    const auto it = o.links.find(o.base + at);
+                    translations.back().check_masks.push_back(it == o.links.end() ? 0xFFFFFFFFu :
+                        it->second.kind == Fix::Jump ? 0xFC000000u : 0xFFFF0000u);
+                }
+            }
             for (std::uint32_t pc = o.base; pc < o.base + o.size; pc += 4) {
                 if (!programs.back().is_code(pc)) continue;
                 const Insn i = decode(*images.back().word(pc), pc);

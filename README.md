@@ -62,6 +62,17 @@ loader. Code pages can change during linking; the probe sets
 `PS2_WINDOW_FULL=1` to require full instruction matching. `--capture-heap`
 captures only observed misses without discovering additional tagged functions.
 
+For the supplied USA Rev 1 disc, an additional experiment precompiles V3 object
+initialization routines from CGO/DGO archives. Supported patched immediates are
+read from live memory; opcode/register bits and branch instructions still must
+match. Templates relocate to their actual call site, including when an archive
+uses a different heap. Other code segments still use captured pages; this is
+not a complete relocatable GOAL loader or a verified configuration for other releases:
+
+```sh
+python3 scripts/jak_probe.py "/path/to/Jak and Daxter.iso" --run --toplevel-templates --rounds 60
+```
+
 **A completed build is not proof that the game works.** Check `probe.json`,
 `pipeline.log`, `explore.log`, and captured frames. The runtime can halt while
 the upstream pipeline still exits successfully.
@@ -79,11 +90,12 @@ the isolation headers required for WASM threads and supports disc range reads.
 ## Verify the toolchain without game data
 
 ```sh
-python3 scripts/jak_smoke.py --web
+python3 scripts/jak_smoke.py --web --live-template
 python3 scripts/serve.py build/web-toolchain-smoke games/toolchain-smoke/disc.iso 8621
 ```
 
-The original smoke program executes the PS2 Exit syscall. Its synthetic ISO is
+The original smoke program tests live-patched LUI/ORI/ADDIU and signed SW/LW
+immediates before executing the PS2 Exit syscall. Its synthetic ISO is
 built with macOS `hdiutil`. Native execution is checked during the build;
 browser execution is a separate Playwright check, run in another terminal:
 
@@ -111,9 +123,16 @@ audio, controls and saves, then verifying browser gameplay.
 python3 -m unittest discover -s scripts -p test_heap_windows.py -v
 cmake --build build/tools --target dispatch_snapshot_test
 build/tools/dispatch_snapshot_test
+cmake --build build/tools --target analysis_boundary_test
+build/tools/analysis_boundary_test
 ```
 
 These tests use synthetic memory and original test code, with no disc required.
+The browser smoke check also exercises a template relocated from offset zero
+to a live heap address. `scripts/jak_browser_probe.cjs` records an actual local
+Jak build's console, frame/primitive counters and canvas in `games/jak1/`,
+without declaring the game playable. Build scripts default to four compiler
+jobs; set `PS2_BUILD_JOBS` to override that limit.
 
 Eco is unofficial and not affiliated with Sony or Naughty Dog. Do not commit or
 publish disc images, extracted assets, or generated translations of game code.

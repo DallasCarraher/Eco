@@ -822,7 +822,13 @@ void generate(const std::vector<Translation> &translations, const CodegenOptions
         table << "const std::uint32_t " << t.prefix << "checks[] = {";
         for (const auto &[at, value] : t.checks) table << std::format("{}, {}, ", hex(at), hex(value));
         table << "};\n\n";
-        modules << std::format("    {{\"{}\", {}, {}, {}checks, {}u, {}units, {}u}},\n", t.name, hex(t.fixed_base), hex(t.size), t.prefix, t.checks.size(), t.prefix, rows.size());
+        if (!t.check_masks.empty()) {
+            table << "const std::uint32_t " << t.prefix << "masks[] = {";
+            for (const std::uint32_t mask : t.check_masks) table << hex(mask) << ", ";
+            table << "};\n\n";
+        }
+        modules << std::format("    {{\"{}\", {}, {}, {}checks, {}u, {}units, {}u, {}, {}}},\n", t.name, hex(t.fixed_base), hex(t.size), t.prefix, t.checks.size(), t.prefix, rows.size(),
+                               t.check_masks.empty() ? "nullptr" : t.prefix + "masks", t.entry_relative ? "true" : "false");
         ++module_count;
     }
     header << "}\n";

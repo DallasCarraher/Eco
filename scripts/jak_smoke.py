@@ -19,6 +19,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--web', action='store_true', help='also compile the browser target')
+    parser.add_argument('--live-template', action='store_true', help='test a pre-link template whose immediate is patched by the boot program')
     args = parser.parse_args()
     game = ROOT / 'games/toolchain-smoke'
     generated = ROOT / 'generated/toolchain-smoke'
@@ -30,6 +31,28 @@ def main():
     base = 0x100000
     # A backward branch after Exit lets the runtime reach its preemption check.
     code = struct.pack('<4I', 0x24030004, 0x0000000c, 0x1000ffff, 0)
+    overlays = []
+    if args.live_template:
+        # Install an original test program at 0x180004. Patched LUI/ORI build
+        # an address, ADDIU supplies 4, and SW/LW use a signed patched offset
+        # to pass that value into v1 for the Exit syscall.
+        payload = [0x3c0b0019, 0x356b0100, 0x240a0004, 0xad6afff0,
+                   0x8d63fff0, 0x0000000c, 0x1000ffff, 0]
+        boot = [0x3c080018]
+        for index, word in enumerate(payload):
+            boot.extend([0x3c090000 | (word >> 16), 0x35290000 | (word & 0xffff),
+                         0xad090004 + 4 * index])
+        boot.extend([0x25080004, 0x01000008, 0])
+        code = struct.pack('<' + 'I' * len(boot), *boot)
+        templates = game / 'templates'
+        templates.mkdir(exist_ok=True)
+        for suffix in ('.bin', '.live16'):
+            (templates / ('00180000_TOPSMOKE' + suffix)).unlink(missing_ok=True)
+        raw = [0] + [word & 0xffff0000 if index < 5 else word
+                     for index, word in enumerate(payload)]
+        (templates / '00000000_TOPSMOKE.bin').write_bytes(struct.pack('<' + 'I' * len(raw), *raw))
+        (templates / '00000000_TOPSMOKE.live16').touch()
+        overlays = ['--overlays', templates]
     ident = b'\x7fELF\x01\x01\x01' + bytes(9)
     header = struct.pack('<16sHHIIIIIHHHHHH', ident, 2, 8, 1, base,
                          52, 0, 0, 52, 32, 1, 0, 0, 0)
@@ -37,7 +60,7 @@ def main():
     elf = game / 'core.elf'
     elf.write_bytes((header + segment).ljust(0x100, b'\0') + code)
     (game / 'disc/SYSTEM.CNF').write_text('BOOT2 = cdrom0:\\SMOKE.ELF;1\n')
-    run([ROOT / 'build/tools/eerecomp', elf, '--out', generated])
+    run([ROOT / 'build/tools/eerecomp', elf, *overlays, '--out', generated])
     run(['cmake', '-S', ROOT, '-B', native, '-G', 'Ninja',
          '-DCMAKE_BUILD_TYPE=Release', '-DPS2_GENERATED=' + str(generated)])
     run(['cmake', '--build', native, '--target', 'ps2run', '-j', '4'])
