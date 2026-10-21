@@ -173,3 +173,32 @@ GPU behavior, performance and independent PS2/visual correctness remain unmeasur
 Neither path is an oracle. Next is review of the draft PR; any broader game-derived
 diagnostic batch should be separately scoped after review, with explicit policy
 and coverage reporting.
+
+## PR #10 parser review follow-up
+
+Review `5606020934` identified that a valid summary followed by a truncated
+`[vu-chain-outcomes]` line could falsely report complete coverage. Parsing now
+requires exactly one outcome-marker line as well as one valid summary. Original
+regressions cover truncated, bare and trailing-text markers alone and before or
+after a valid summary; both outcome counts and completion coverage stay unknown.
+
+Commands from `Eco-vu-coverage`, serially supervised under the shared lock:
+
+```sh
+python3 scripts/test_run_experiments.py Experiments.test_malformed_chain_outcome_markers -v
+python3 -m unittest discover -s scripts -p test_run_experiments.py -v
+```
+
+The first command reproduced six failing duplicate-marker cases before the fix;
+the second passed all **24 tests** afterward. Logs remain ignored in
+`local/vu-chain-review/jobs/01-before.log` and `02-after.log`. No build, saved
+input reuse or game replay was needed; invocation coverage is unchanged.
+
+The released allocation is
+`Eco-artifact-audit/local/artifact-audit-20261021/coverage-review-allocation.json`.
+It carries 7,376.773 seconds forward and adds **19.955 seconds**, totaling
+**7,396.728 / 14,400 seconds**. Shared retained bytes: **3,458,391,581**;
+sampled aggregate peak: **3,458,461,817**, under 8 GiB. Private temporary peak:
+zero bytes; peaks between polls remain unmeasured. Free disk: **29,501,222,912
+bytes**, above 10 GiB. The smallest next step remains human review of production
+state restoration and packet handoff before any broader native/browser run.

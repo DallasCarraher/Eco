@@ -186,8 +186,9 @@ def parse_log(text, requested, frames, code):
     vu = re.findall(r'^\[vu-check-summary\] sampled (\d+) calls, (\d+) mismatches$', text, re.M)
     chain = re.findall(r'^\[vu-chain-summary\] compared (\d+) chains, (\d+) continuations, (\d+) interpreter fallbacks, (\d+) mismatches, (\d+) nonflag$', text, re.M)
     outcomes = re.findall(r'^\[vu-chain-outcomes\] attempted (\d+) complete (\d+) mismatch (\d+) budget_exhausted (\d+) unsupported (\d+) unchecked_tail_dispatches (\d+) checkpoints (\d+) continuations (\d+)$', text, re.M)
+    outcome_markers = re.findall(r'^\[vu-chain-outcomes\].*$', text, re.M)
     outcome_counts = None
-    if len(outcomes) == 1 and code == 0:
+    if len(outcome_markers) == 1 and len(outcomes) == 1 and code == 0:
         values = list(map(int, outcomes[0]))
         if values[0] == sum(values[1:5]):
             outcome_counts = dict(zip(('attempted', 'complete_match', 'mismatch', 'budget_exhausted',

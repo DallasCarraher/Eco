@@ -245,6 +245,7 @@ classification remains unchanged. `chain_comparison_complete_for_attempted` is
 true only for nonzero attempts which all matched completely, with no unchecked
 tail. It does not establish hardware correctness or coverage of other executions.
 Historical `[vu-chain-summary]` logs still populate their separate legacy field.
-Failed exits, missing/duplicate summaries and inconsistent outcome totals leave
-new counters unknown, never zero. Compiled fragments require the existing
+Failed exits, missing/duplicate summaries (including truncated or malformed
+outcome-marker lines) and inconsistent outcome totals leave new counters and
+completion coverage unknown, never zero. Compiled fragments require the existing
 subprocess wall-time guard; packet overflow remains a process failure.

@@ -334,6 +334,17 @@ class Experiments(unittest.TestCase):
         for log, code in [(complete, 1), (complete+complete, 0), ('', 0), (complete.replace('attempted 2', 'attempted 3'), 0)]:
             self.assertIsNone(runner.parse_log(log, 'cpu', 510, code)['chain_comparison_outcomes'])
 
+    def test_malformed_chain_outcome_markers(self):
+        complete = '[vu-chain-outcomes] attempted 1 complete 1 mismatch 0 budget_exhausted 0 unsupported 0 unchecked_tail_dispatches 0 checkpoints 1 continuations 0\n'
+        for malformed in ('[vu-chain-outcomes] attempted 1 complete 0 mismatch 1',
+                          '[vu-chain-outcomes]',
+                          complete.rstrip() + ' trailing text'):
+            for log in (malformed, complete + malformed, malformed + '\n' + complete):
+                with self.subTest(log=log):
+                    parsed = runner.parse_log(log, 'cpu', 510, 0)
+                    self.assertIsNone(parsed['chain_comparison_outcomes'])
+                    self.assertIsNone(parsed['chain_comparison_complete_for_attempted'])
+
     def test_explicit_chain_policy_setting(self):
         env = self.m['variants'][0]['environment']
         env['PS2_VU_CHECK'] = 'all'
