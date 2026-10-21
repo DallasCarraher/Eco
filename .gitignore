@@ -5,6 +5,25 @@
 *.zip
 *.7z
 *.rar
+*.ISO
+*.CHD
+*.CSO
+*.ZIP
+*.7Z
+*.RAR
+*.bin
+*.cue
+*.ps2
+*.p2s
+*.log
+.DS_Store
+/assets/
+/iso_data/
+/disc/
+/local/
+/node_modules/
+.env
+.env.*
 
 /generated/
 /tools/
