@@ -306,6 +306,21 @@ class Experiments(unittest.TestCase):
         (directory / 'case.json').write_text('{}')
         self.assertIn('case report mismatch', self.run_batch(resume=True, expected=2).stderr)
 
+    def test_chain_diagnostic_counts_and_setting(self):
+        self.m['variants'][0]['environment']['PS2_VU_CHECK'] = 'all'
+        self.manifest.write_text(json.dumps(self.m))
+        runner.manifest_read(self.manifest)
+        log = '[vu-chain-summary] compared 12 chains, 30 continuations, 2 interpreter fallbacks, 7 mismatches, 3 nonflag\n'
+        parsed = runner.parse_log(log, 'cpu', 510, 0)
+        self.assertEqual(parsed['chain_comparison_counts'], dict(chains=12, continuations=30,
+                         interpreter_fallbacks=2, mismatches=7, nonflag=3))
+        self.assertIsNone(parsed['comparison_counts']['checked_final'])
+        self.assertIsNone(runner.parse_log(log, 'cpu', 510, 1)['chain_comparison_counts'])
+        self.m['variants'][0]['environment']['PS2_VU_CHECK'] = 'unbounded'
+        self.manifest.write_text(json.dumps(self.m))
+        with self.assertRaises(ValueError):
+            runner.manifest_read(self.manifest)
+
     def test_manifest_validation(self):
         original = copy.deepcopy(self.m)
         for edit in (lambda m: m['defaults'].update(frames=True),

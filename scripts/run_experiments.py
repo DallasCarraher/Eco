@@ -105,7 +105,7 @@ def manifest_read(path):
         if not isinstance(env, dict) or set(env) - ENV_KEYS:
             raise ValueError('environment must use the PS2 setting allowlist')
         for key, value in env.items():
-            if value not in ({'cpu', 'gpu', 'both'} if key == 'PS2_GS' else {'1'}):
+            if value not in ({'cpu', 'gpu', 'both'} if key == 'PS2_GS' else {'1', 'all'} if key == 'PS2_VU_CHECK' else {'1'}):
                 raise ValueError('invalid setting ' + key)
     for v in m['variants']:
         env = d.get('environment', {}) | v.get('environment', {})
@@ -182,6 +182,7 @@ def parse_log(text, requested, frames, code):
                ('both' if requested == 'both' else 'gpu') if adapters and gpu_stats else 'unknown')
     missing = re.search(r'missing code at (0x[0-9a-fA-F]+) \(ra (0x[0-9a-fA-F]+)\)', text)
     vu = re.findall(r'^\[vu-check-summary\] sampled (\d+) calls, (\d+) mismatches$', text, re.M)
+    chain = re.findall(r'^\[vu-chain-summary\] compared (\d+) chains, (\d+) continuations, (\d+) interpreter fallbacks, (\d+) mismatches, (\d+) nonflag$', text, re.M)
     status = 'incomplete'
     if code != 0:
         status = 'process_failed'
@@ -203,6 +204,8 @@ def parse_log(text, requested, frames, code):
             'comparison_counts': {'sampled_last_observed': int(vu[-1][0]) if vu else None,
                                   'mismatches_last_observed': int(vu[-1][1]) if vu else None,
                                   'checked_final': None, 'skipped': None, 'eligible_total': None},
+            'chain_comparison_counts': dict(zip(('chains', 'continuations', 'interpreter_fallbacks', 'mismatches', 'nonflag'),
+                                               map(int, chain[-1]))) if len(chain) == 1 and code == 0 else None,
             'gs_comparison_counts': [dict(pixels_over_runtime_delta_2=int(a), pixels=int(b), max_channel_delta=int(c))
                                      for a, b, c in re.findall(r'^\[gs\] gpu differs in (\d+) of (\d+) pixels \(max (\d+)\)$', text, re.M)],
             'backend_evidence': 'software fallback' if fallback else 'explicit CPU setting' if requested == 'cpu'
