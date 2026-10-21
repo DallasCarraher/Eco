@@ -88,6 +88,12 @@ if(EMSCRIPTEN OR EXISTS "${PS2_WGPU_DIR}/lib/libwgpu_native.a")
     endif()
 endif()
 
+if(NOT EMSCRIPTEN)
+    add_executable(dma_spr_test scripts/test_dma_spr.cpp)
+    target_include_directories(dma_spr_test PRIVATE runtime/src)
+    target_link_libraries(dma_spr_test PRIVATE ps2runtime)
+endif()
+
 if(PS2_GENERATED)
     file(GLOB PS2_UNITS CONFIGURE_DEPENDS "${PS2_GENERATED}/*.cpp")
     add_library(ps2game STATIC ${PS2_UNITS})

@@ -125,6 +125,8 @@ cmake --build build/tools --target dispatch_snapshot_test
 build/tools/dispatch_snapshot_test
 cmake --build build/tools --target analysis_boundary_test
 build/tools/analysis_boundary_test
+cmake --build build/tools --target dma_spr_test
+build/tools/dma_spr_test
 ```
 
 These tests use synthetic memory and original test code, with no disc required.

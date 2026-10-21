@@ -227,6 +227,11 @@ void run_chain(int ch) {
             std::memset(q, 0, 8);
             vif::transfer(ch, q, 1);
         }
+        // toSPR transfers the entire tag quadword when TTE is enabled.
+        // Jak's blend-shape packets depend on that header preceding payload;
+        // dropping it shifts the vertex/count fields into packed vertex data.
+        // Reference: PCSX2 pcsx2/SPR.cpp, SPR1transfer(ptag, 1) under CHCR.TTE.
+        if (tte && ch == 9) deliver(9, c.tadr, 1);
         bool end = false;
         const std::uint32_t tag_at = c.tadr;
         std::uint32_t data = c.tadr + 16;

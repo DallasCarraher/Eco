@@ -15,25 +15,31 @@ const { chromium } = require(require.resolve('playwright', {
   fs.mkdirSync(out, { recursive: true });
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   const messages = [], errors = [];
+  let dropped = 0;
   let report = { gameplayVerified: false };
   try {
     const page = await browser.newPage();
     let halt;
     const stopped = new Promise(resolve => { halt = resolve; });
     page.on('console', msg => {
-      messages.push(msg.text());
+      if (messages.length < 10000 || msg.text().startsWith('[ee]')) messages.push(msg.text());
+      else ++dropped;
       if (msg.text().startsWith('[ee] stopped after')) halt('halted');
     });
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(url);
     await page.waitForFunction(() => !document.getElementById('start').disabled, undefined, { timeout: 60000 });
     await page.locator('#start').click();
+    const bootCapture = page.waitForFunction(() => Module._ps2web_frames() >= 30, undefined, { timeout: 30000 })
+      .then(() => page.locator('#canvas').screenshot({ path: path.join(out, 'browser-boot.png') }))
+      .catch(() => null);
     const result = await Promise.race([stopped, page.waitForTimeout(30000).then(() => 'observation_limit')]);
     const state = await page.evaluate(() => ({ frames: Module._ps2web_frames(),
       primitives: Module._ps2web_primitives(), gpu: Module.gpuInfo,
       isolated: crossOriginIsolated, status: document.getElementById('status').textContent }));
     await page.locator('#canvas').screenshot({ path: path.join(out, 'browser.png') });
-    report = { ...report, result, browser: browser.version(), state, errors };
+    await bootCapture;
+    report = { ...report, result, browser: browser.version(), state, errors, consoleMessagesDropped: dropped };
   } catch (error) {
     report = { ...report, result: 'browser_error', error: error.message, errors };
     process.exitCode = 1;
