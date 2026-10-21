@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "specification_pending_runner",
+  "status": "implemented_native_v1",
   "name": "jak1-startup-isolation",
   "game": {"serial": "SCUS_971.24", "revision": "USA Rev 1"},
   "defaults": {

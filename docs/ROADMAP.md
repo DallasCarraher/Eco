@@ -65,8 +65,8 @@ Neither replaces behavioral comparisons or regression tests.
 
 - [Overnight runbook](OVERNIGHT.md): machine setup, budgets, handoff and stop rules.
 - [Experiment contract](EXPERIMENTS.md): manifest and result semantics.
-- [Startup matrix](../experiments/jak1-startup.json): data-only specification;
-  **no runner consumes it yet**. Work item 01 implements that runner.
+- [Startup matrix](../experiments/jak1-startup.json): data-only input for
+  `scripts/run_experiments.py`, the bounded native runner from work item 01.
 - [Work items](work-items/README.md): GitHub links, dependencies and agent scopes.
 
 Every issue should end with a reproducible command, a small source diff when
