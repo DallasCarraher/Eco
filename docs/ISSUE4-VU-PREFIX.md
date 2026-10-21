@@ -297,3 +297,25 @@ integration and independent PS2/visual correctness remain outside this result.
 No further broad replay is justified by a newly observed image discrepancy.
 A separately authorized investigation of bounded whole-invocation coverage or
 an independent reference comparison would address the remaining uncertainty.
+
+## Merge review and parallel-session handoff
+
+The branch was reviewed against `origin/main` for dispatch-context ownership,
+Q/flag lifetime, comparison save/restore, checkpoint completion semantics and
+bounded subprocess cleanup. No blocking finding was identified in that review.
+This is a local self-review, not an independent hardware or browser review.
+The diff also includes two unmerged experiment-harness prerequisite commits,
+`1b1a9d4` and `17a598b`; the PR must make that dependency explicit.
+
+A fresh serial validation passed the original dispatch flags and Q regressions,
+eight native/eight Wasm codegen regressions, 21 experiment-harness tests and five
+prefix-wrapper tests. Logs are in ignored `local/issue4-review/`. No new game
+replay or expanded experiment limit was used for merge preparation.
+
+Separate-session prompts are in `docs/agent-prompts/02-vu-coverage.md`,
+`03-startup-reference.md` and `04-artifact-storage.md`. Run the storage audit
+first; the other sessions may analyze existing evidence read-only until shared
+storage/time and serial execution ownership are allocated. The storage prompt
+authorizes an audit and concrete plan, not deletion or mutation of evidence.
+The remaining whole-chain, capture completeness and independent-reference
+limits stay open after merging these fixes.
