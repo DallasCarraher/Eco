@@ -2,8 +2,10 @@ import configparser
 from pathlib import Path
 import tempfile
 import unittest
+import struct
+import zlib
 
-from reference_capture_preflight import check
+from reference_capture_preflight import check, framebuffer_images
 
 
 class CapturePreflightTests(unittest.TestCase):
@@ -32,6 +34,26 @@ class CapturePreflightTests(unittest.TestCase):
         errors = check(self.config, self.root)
         self.assertTrue(any('HWDumpDirectory' in e for e in errors))
         self.assertTrue(any('finite' in e for e in errors))
+
+    def test_png_output_satisfies_early_output_check(self):
+        def chunk(name, data):
+            return struct.pack('>I', len(data))+name+data+struct.pack('>I', zlib.crc32(name+data))
+        png = (b'\x89PNG\r\n\x1a\n'
+               + chunk(b'IHDR', struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0))
+               + chunk(b'IDAT', zlib.compress(b'\0\xff\0\0')) + chunk(b'IEND', b''))
+        path = self.root/'frame.png'
+        path.write_bytes(png)
+        (self.root/'partial.png').write_bytes(png[:-12])
+        (self.root/'not-an-image.bmp').write_text('a diagnostic message')
+        self.assertEqual(framebuffer_images(self.root), [path])
+
+    def test_bmp_output_remains_recognized(self):
+        bmp = (b'BM'+struct.pack('<IHHI', 58, 0, 0, 54)
+               + struct.pack('<IiiHHIIiiII', 40, 1, 1, 1, 24, 0, 4, 0, 0, 0, 0)
+               + b'\0\0\xff\0')
+        path = self.root/'frame.bmp'
+        path.write_bytes(bmp)
+        self.assertEqual(framebuffer_images(self.root), [path])
 
 
 if __name__ == '__main__':

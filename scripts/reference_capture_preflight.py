@@ -8,8 +8,41 @@ import argparse
 import configparser
 import json
 from pathlib import Path
+import struct
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def framebuffer_images(root):
+    """Recognize completed PNG/BMP dumps; upstream may replace .bmp with .png.
+
+    This is an early-output signal, not full image validation or alignment.
+    Partial PNGs without IEND do not satisfy the signal.
+    """
+    found = []
+    for path in sorted(root.rglob('*')):
+        if path.suffix.lower() not in ('.png', '.bmp') or not path.is_file():
+            continue
+        try:
+            with path.open('rb') as stream:
+                header = stream.read(26)
+                if header.startswith(b'\x89PNG\r\n\x1a\n') and header[12:16] == b'IHDR':
+                    if len(header) < 24 or not all(struct.unpack('>II', header[16:24])):
+                        continue
+                    stream.seek(-12, 2)
+                    if stream.read() != b'\0\0\0\0IEND\xaeB`\x82':
+                        continue
+                elif header.startswith(b'BM') and len(header) == 26:
+                    if struct.unpack('<I', header[2:6])[0] != path.stat().st_size:
+                        continue
+                    if not all(struct.unpack('<ii', header[18:26])):
+                        continue
+                else:
+                    continue
+        except (OSError, ValueError):
+            continue
+        found.append(path)
+    return found
 
 
 def check(config, private_root):

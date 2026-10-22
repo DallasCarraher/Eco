@@ -1,6 +1,55 @@
 # Startup reference protocol: boot-idle scene near Eco frame 510
 
-## Current result
+## Current result: independent early startup images, target still unaligned
+
+The newly authorized continuation used the existing verified PCSX2 2.8.2 binary
+and fresh private configuration, BIOS working copies and an erased card. Input
+hash checks, the configuration preflight and native `-testconfig` passed. No
+additional emulator, firmware or game download occurred.
+
+**Capture capability is now verified:** 14 validated, byte-identical RGB PNG
+framebuffers, 512×448, labeled PCSX2 GS counters **180..330**, show **Sony Computer
+Entertainment America presents**. These are an early startup checkpoint, not an
+aligned substitute for Eco frame 510. Eco 480/510 have no reliably matching
+landmark in this limited sequence. Neither emulator agreement nor these images
+establish PS2 hardware correctness; no expectations or tolerances changed.
+
+The one no-input game process stopped cleanly after **8.272 seconds**, before its
+45-second ceiling. The early-output monitor searched only for `*.bmp`; PCSX2
+emitted PNG, so its `capture_not_producing_images` reason was a **false negative**.
+The supervisor's raw outcome is preserved, not reclassified as a successful full
+pass. No game restart was attempted. The original helper now recognizes complete
+PNG and BMP outputs and ignores partial PNGs; all five synthetic tests pass.
+Future early-output monitoring must call `framebuffer_images()` rather than
+assume an extension from an upstream source-code filename.
+
+Private evidence: `local/reference-capture-20261022/`. `identities.json` records
+rechecked inputs, card and configuration identity; `capture-settings.ini` and
+`reference.log` retain requested and observed settings/warnings. `framebuffers/`
+holds all 14 untouched images. `cycle-result.json` records their SHA-256 hashes,
+filesystem timestamps, separate reference counters, the observed scene and
+alignment limits. `contact-sheet-preview.png` is a labeled resized overview,
+not an original. `jobs/` retains exact argv, timings and exit codes. Original
+BIOS hashes were rechecked unchanged. The attempted supervisor is preserved;
+`next-session-template.py` is a corrected **unexecuted** private template that
+still requires new paths, admission and allocation.
+
+Latest released ledger:
+`Eco-artifact-audit/local/artifact-audit-20261021/reference-capture-20261022-allocation.json`.
+Prior cumulative debit **7,683.226 s** + this cycle **11.721 s** = **7,694.947 /
+14,400 s**; remaining **6,705.053 s**. Reservation: 600 s, 512 MiB retained /
+768 MiB peak. Shared retained/sampled peak **4,008,191,481 bytes**; free disk
+**13,679,591,424 bytes**; private temporary sampled peak zero. The common lock is
+released. Between-poll peaks/external caches remain unmeasured. Account checks
+remained at 96% weekly available, above the 85%-remaining stop threshold.
+
+Smallest next step: a separately authorized/admitted longer no-input pass using
+the format-aware early-output helper, fresh isolated data/card/output, and the
+same finite dump range. Inspect later images to find a recognizable event near
+Eco 480/510; do not assume the PCSX2 counter or wall time is equivalent. Capture
+setup is no longer the prerequisite; target-scene coverage and alignment are.
+
+## Historical setup cycle (before independent images)
 
 The 2026-10-22 setup/reference cycle downloaded the official stable **PCSX2
 2.8.2** macOS release into ignored local storage. GitHub's release-asset SHA-256
@@ -181,7 +230,7 @@ could not affect the supplied originals. Configuration snapshots describe the
 controller bindings, card, renderer and compatibility choices; inspect them and
 the effective log before treating a later capture as comparable.
 
-## Shared accounting and continuation
+## Historical setup accounting and continuation
 
 Latest released ledger:
 `Eco-artifact-audit/local/artifact-audit-20261021/reference-setup-allocation.json`.
@@ -204,7 +253,7 @@ every subprocess to <=900 s. The cap and cumulative debit never reset by chat,
 branch or issue. Weekly usage was checked at startup and between stages: 96%
 remained throughout; stop at 85% remaining. No overnight matrix was run.
 
-Smallest next step: a **separately authorized/admitted** short no-input capture
+Historical next step (performed in the continuation above): a separately admitted short no-input capture
 pass using both corrected private dump directories, with a fresh erased card
 and a new output/data directory. Confirm that the first framebuffer files are
 actually written; stop early if not. Recheck configuration/compatibility warnings
