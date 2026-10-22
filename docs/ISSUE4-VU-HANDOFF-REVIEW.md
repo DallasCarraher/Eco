@@ -63,6 +63,10 @@ run, matrix, preserved build mutation or evidence overwrite occurred.
 
 ## Smallest remaining integration experiment
 
+This proposed native experiment is now complete; see the
+[real GIF queue results](ISSUE4-VU-GIF-QUEUE.md). The recipe below records the
+scope selected before that run.
+
 Use the same original two-kick fixture with the **real `gif::transfer` and render
 queue**, removing the test GIF substitution. Start a small render ring, select
 the VU producer role, and run plain versus checked short and 10,000-continuation

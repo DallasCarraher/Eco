@@ -3,6 +3,8 @@
 The subsequent [focused handoff review](ISSUE4-VU-HANDOFF-REVIEW.md) adds enclosing
 context, capture-policy and active-pipeline regressions and scopes the remaining
 real-queue integration experiment.
+The [real GIF queue follow-up](ISSUE4-VU-GIF-QUEUE.md) passes that native boundary
+test and identifies browser worker execution as the remaining focused check.
 
 `PS2_VU_CHECK=all` now uses the validated checkpoint mechanism in the production
 dispatcher. A finite invocation exceeding the default 8,192-continuation
