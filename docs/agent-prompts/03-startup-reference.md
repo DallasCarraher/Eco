@@ -1,81 +1,63 @@
-# Prompt: independent startup reference comparison
+# Continue issue #5: one independent startup reference event
 
-Repository: DallasCarraher/Eco
-Primary checkout: /Users/dallascarraher/Developer/Eco
-Preserved investigation checkout: /Users/dallascarraher/Developer/Eco-issue-4
+Repository: DallasCarraher/Eco. Worktree:
+`/Users/dallascarraher/Developer/Eco-startup-reference`, branch
+`codex/issue-5-startup-reference`, based on merged PR #10 (`7ef6532`).
+Reuse it and preserve its work. Do not reset, clean or modify other checkouts.
 
-Read applicable AGENTS.md, docs/ROADMAP.md, docs/EXPERIMENTS.md,
-docs/OVERNIGHT.md, docs/work-items/04.md, docs/ISSUE4-VU-FLAGS.md and
-docs/ISSUE4-VU-PREFIX.md before acting. Inspect working trees and preserve
-existing work. Start from the merged issue-4 corrections (at least 22762de,
-or their merged equivalent). Create a dedicated checkout and the branch named
-below. Treat all existing investigation builds/generated/game-output folders
-as read-only. Never share writable build/generated/game-output directories.
-Do not reset, clean, rebase or delete another task's worktree.
+Read applicable AGENTS.md first, then docs/REFERENCE.md, docs/ROADMAP.md,
+docs/EXPERIMENTS.md, docs/OVERNIGHT.md and docs/work-items/05.md. The reference
+protocol and historical inventory are already prepared; do not repeat the VU
+investigation. PR #10 completed bounded comparison and focused native/browser
+fixture validation, not independent visual correctness. Neither Eco path nor a
+reference emulator automatically establishes PS2 hardware truth.
 
-All game inputs, assets, translations, traces and captures stay in ignored
-local storage. Never commit ISO/BIOS/assets/game-derived code or images.
-No model/API calls inside replay/comparison programs. Neither Eco path is an
-independent correctness oracle. No tolerances, changed expectations or
-suppressed mismatches. No browser/input/GS fixes or architecture expansion.
+Current status: capture has not started. Scoped PATH, Applications/user app/data
+locations and Spotlight did not find PCSX2. No BIOS has been selected. The user
+was asked for alternate local emulator and user-provided BIOS paths; incorporate
+any reply before proceeding. Do not download firmware/assets, install software,
+or modify global emulator settings. If paths remain unavailable, report those
+exact missing prerequisites and keep the protocol; do not invent captures.
 
-Budget is shared across these follow-ups, not a fresh allowance per session.
-The last ledger was about 1.89 GiB retained under a 2 GiB cap, about 113 MiB
-remaining, at least 27 GiB free, and under 20 minutes measured game subprocess
-time (build/synthetic time separate). Re-measure before adding artifacts.
-Keep >=10 GiB free, <=900 seconds per subprocess and <=4 hours cumulative
-active experiments. Diagnostic cases are serial, including across sessions.
-Run the storage-audit follow-up first. Until its storage/time allocation is
-explicit and no other diagnostic is running, do read-only analysis only;
-do not silently reset budgets or start concurrent runs. Do not delete or
-rewrite evidence to make room. Record peak temporary as well as retained use.
+The read-only inventory command/tool is scripts/reference_inventory.py.
+Evidence: local/reference-inventory/inventory/inventory.json (private). It verified
+the existing user disc against the archived Eco report and four frame-480/510
+captures. Add explicit --emulator and --bios with a NEW output directory once
+provided. No emulator launch is part of that tool. BIOS/disc identities stay local.
 
-Proceed autonomously within this scope, then stop after one bounded cycle.
-Commit original source/test/documentation changes only; do not merge or message
-other sessions unless the user authorizes it. Report branch/commits, exact
-commands, identities, results, artifact locations, limits and smallest next
-experiment. If blocked, preserve evidence and report the precise missing input.
+Shared event: boot-idle/eco-00510, SCUS_971.24 USA Rev 1, no controller presses,
+fresh-card scenario. Existing Eco evidence is read-only in
+`/Users/dallascarraher/Developer/Eco-issue-4/local/experiments/issue4-q-images-510/`.
+CPU compiled/interpreted frames 480 and 510 match each other and their sealed
+hashes (listed in docs/REFERENCE.md). They are visual alignment anchors, not
+hardware goldens or evidence of the earliest wrong frame. Align the actual scene;
+reference frame numbers need not equal Eco frame numbers. No new image tolerance,
+changed assertion or suppressed mismatch is allowed. Keep raw captures unchanged.
 
-Also read docs/work-items/05.md. Branch: codex/issue-5-startup-reference
+Objective: verify available reference prerequisites, record exact build/settings,
+then perform at most one bounded no-input reference pass for this event if setup
+and capture facilities are available. Use a fresh private application-data/card/
+output directory and the actual installed build's supported facilities. Verify
+help/version and capture method first; online CLI documentation is not proof of
+local capabilities. Read applicable app/computer-use skills before UI control.
+No browser/input/GS/VU fixes, compatibility expansion or alternate port architecture.
 
-Objective: obtain a small, reproducible independent reference comparison for
-startup frames near the previously observed image divergence. Treat reference
-emulator output as identified evidence with configuration limits, not automatic
-PS2 hardware truth. This task produces reference evidence; it does not fix GS,
-VU, input handling or compatibility.
+Shared budget does NOT reset per chat, branch or issue. User-authorized storage
+cap is 8 GiB, superseding older 2 GiB prose. Latest released ledger:
+`/Users/dallascarraher/Developer/Eco-artifact-audit/local/artifact-audit-20261021/reference-inventory-allocation.json`.
+Cumulative active debit: 7,493.570 / 14,400 seconds. Historical retained bytes:
+3,841,499,866; free bytes: 20,438,642,688. Remeasure and reserve storage/time under
+that audit directory's common serial.lock before adding capture/build artifacts.
+Diagnostics must be serial across sessions, <=900 s per subprocess, >=10 GiB free.
+Do not overwrite preserved builds/generated outputs or delete evidence to fit.
+Record retained and temporary peak storage. No overnight matrix. No model/API calls
+inside replay/capture programs. Stop if weekly usage reaches 85% remaining;
+check between stages and communicate frequently.
 
-Existing Eco evidence is read-only under:
-/Users/dallascarraher/Developer/Eco-issue-4/local/experiments/issue4-q-images-510/
-Read report.json, summary.md and case logs. CPU compiled/interpreted reach 510
-and their 98 available captures (25..510 every five frames) match exactly;
-requested 5/10/15/20 are absent. Frames 480 and 510 exist. Both sets also match
-the pre-Q-fix baseline. The flag-history correction removed the measured CPU
-image gap; the specific early sampled flags mismatch is not uniquely causal.
-Q correction fixed a state discrepancy without measured images changing.
-
-Local user-owned disc:
-/Users/dallascarraher/Developer/Eco/Jak and Daxter - The Precursor Legacy (USA) (En,Fr,De,Es,It) (Rev 1).iso
-
-Inspect narrowly for an installed suitable reference emulator and user-provided
-BIOS/configuration. Prefer its supported deterministic CLI/capture facilities;
-read applicable app/computer-use skills before controlling an app. Do not
-download BIOS or assets, purchase/install software, or change the user's
-existing emulator configuration. Use a private configuration/output directory.
-If BIOS or another required input is absent, ask for that exact missing input
-and continue read-only alignment planning; never substitute an unverified image.
-
-Record emulator version/build, disc/BIOS hashes privately, renderer/settings,
-patches, speedhacks, resolution/interlacing/aspect, input route and capture
-method. Use boot-idle, no Start pulse. Start with a tiny set near 480 and 510,
-and align by observable scene and event timing; emulator frame numbers need
-not share Eco's frame-count origin. Distinguish temporal, crop/resolution,
-interlace and renderer differences from geometry/content differences. Preserve
-original captures and document any separate analysis transforms; do not add
-runtime comparison tolerances or alter expected outputs.
-
-With allocated storage/time and serial ownership, make one bounded reference
-capture pass. Describe observable differences and supporting alignment; do
-not call either Eco path correct from agreement. If reference execution is
-unavailable, deliver the precise blocker and smallest reproducible capture
-procedure, without inventing results. Commit only documentation/original
-capture tooling, keeping game-derived images and BIOS details private.
+Coordinate event description and local artifact hashes with #3/#4; independent
+reference setup/capture is tracked in #5. User authorized issue coordination,
+but do not message other sessions. Commit only original source/tests/docs;
+BIOS/disc/game-derived translations/captures stay ignored. Stop after one bounded
+cycle. Report exact commands, identities, results or precise blocker, allocation,
+coverage limits and the smallest next action. Preserve the existing evidence and
+all outstanding state when handing off to another chat.
