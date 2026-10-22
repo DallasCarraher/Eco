@@ -189,6 +189,20 @@ POLICY_DRIVER = r'''
 #define main replay_main
 #include "scripts/replay_vu_checkpoint.cpp"
 #undef main
+#include <codecvt>
+#include <locale>
+#include <sstream>
+// Real file streams accept writes, then this conversion facet fails only when
+// the selected output is closed. This catches buffered-close errors portably.
+struct FailClose : std::codecvt<char,char,std::mbstate_t> {
+ static inline unsigned closes=0,fail_at=0;
+ bool do_always_noconv() const noexcept override {return false;}
+ result do_out(state_type&,const char* from,const char* end,const char*& next,char* to,char* limit,char*& written) const override {
+  const auto n=std::min(end-from,limit-to);std::memcpy(to,from,n);next=from+n;written=to+n;return next==end?ok:partial;
+ }
+ result do_in(state_type& s,const char* from,const char* end,const char*& next,char* to,char* limit,char*& written) const override {return do_out(s,from,end,next,to,limit,written);}
+ result do_unshift(state_type&,char* to,char*,char*& next) const override {next=to;return ++closes==fail_at?error:ok;}
+};
 void vu1_0000000000040001(ps2::Vu0Regs&,std::uint8_t*);
 void vu1_0000000000040002(ps2::Vu0Regs&,std::uint8_t*);
 int main(int argc,char**argv) {
@@ -219,6 +233,21 @@ int main(int argc,char**argv) {
   const std::string name=std::string("invalid-")+value;
   if(invoke(name,value)!=2 || std::filesystem::exists(std::filesystem::path(argv[2])/name))return 1;
  }
+ if(!prepare(2))return 2;
+ // Checkpoints, three binaries + semantic pipe per side, then status: ten
+ // independent close failures must all produce output failure, never success.
+ for(unsigned target=1;target<=10;++target) {
+  FailClose::closes=0;FailClose::fail_at=target;
+  const auto saved=std::locale::global(std::locale(std::locale(),new FailClose));
+  std::ostringstream printed,errors;
+  auto* old_out=std::cout.rdbuf(printed.rdbuf());auto* old_err=std::cerr.rdbuf(errors.rdbuf());
+  const auto code=invoke("close-failure-"+std::to_string(target));
+  std::cout.rdbuf(old_out);std::cerr.rdbuf(old_err);std::locale::global(saved);
+  if(code!=2 || !printed.str().empty() || errors.str()!="output failure\n") {
+   std::cerr<<"close failure "<<target<<" returned "<<code<<" instead of output failure\n";return 1;
+  }
+ }
+ std::cout<<"All ten evidence stream close failures rejected with exit 2 and no success output\n";
  std::cout<<"CLI policies: default/explicit 8192 partial; explicit 16384 complete or partial; invalid ceilings rejected\n";
  return 0;
 }

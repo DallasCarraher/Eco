@@ -1,5 +1,42 @@
 # Issue 4: production bounded comparison outcomes
 
+## Review 5617211659: checkpoint evidence stream failures
+
+The review identified a valid evidence-integrity bug in
+`scripts/replay_vu_checkpoint.cpp`: buffered close failures could be ignored before
+printing success. The tool now checks checkpoint open/flush state and explicitly
+closes and checks checkpoints, every binary image, both semantic pipe files and
+status before printing the result. Failures take the existing `output failure`
+exception path and exit 2. Runtime comparison semantics are unchanged.
+
+The original policy regression now uses a codecvt facet on real file streams to
+accept writes but fail at a selected close. Before correction, the first injected
+failure returned 0. After correction, all ten close positions return 2, emit
+`output failure` and print no success result; existing checkpoint, fallback,
+policy and invalid-ceiling checks also pass. No game input or browser run was used.
+
+Exact commands from the investigation checkout, with `--output` respectively
+`local/vu-output-review/before` and `local/vu-output-review/after`:
+
+```sh
+python3 scripts/repro_vu_checkpoint.py --output local/vu-output-review/after \
+  --runtime /Users/dallascarraher/Developer/Eco-issue-4/build/issue4-flags/libps2runtime.a \
+  --wgpu /Users/dallascarraher/Developer/Eco/third_party/wgpu-native/lib/libwgpu_native.a
+```
+
+Logs, source/archive identities and resolved compile argv remain ignored in
+`local/vu-output-review/`. Read-only archive identities were verified against the
+prior handoff record before reuse. The released ledger is
+`Eco-artifact-audit/local/artifact-audit-20261021/coverage-output-review-allocation.json`.
+It carries 7,477.318 seconds and adds **15.159 seconds**, totaling
+**7,492.477 / 14,400 seconds**. Private retained bytes: **74,895,900** (71.43 MiB),
+above the initial 64 MiB retained estimate but below the 128 MiB peak reservation.
+No evidence was deleted to meet that estimate. Shared retained/sampled peak:
+**3,841,481,288 bytes**, below 8 GiB; sampled private temporary peak: **244,160
+bytes**; free disk: **21,171,650,560 bytes**, above 10 GiB. Between-poll peaks
+remain unmeasured. The longest supervised command was 8.056 seconds. No budget
+reset or preserved-build mutation occurred.
+
 The subsequent [focused handoff review](ISSUE4-VU-HANDOFF-REVIEW.md) adds enclosing
 context, capture-policy and active-pipeline regressions and scopes the remaining
 real-queue integration experiment.
