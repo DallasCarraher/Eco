@@ -51,6 +51,7 @@ int main(int argc, char **argv) {
     const auto initial_clock = ps2::vuops::g_dispatch_flags.t;
     unsigned continuations = 0;
     bool complete = false;
+    bool fallback_incomplete = false;
     std::string reason;
     if (compiled) {
         auto fn = ps2::vu::lookup(pc);
@@ -61,12 +62,31 @@ int main(int argc, char **argv) {
             const auto next = static_cast<std::uint32_t>(actual_escape);
             actual_escape = -1;
             if (auto continuation = ps2::vu::lookup(next)) continuation(ps2::vu::regs(1), ps2::g_vu1_mem);
-            else ps2::vu::run_fast(1, next);
+            else {
+                // A negative capture alone is not proof that fallback ended:
+                // run_fast also returns at its instruction ceiling.
+                checkpoint = ps2::vu::FastCheckpoint{};
+                const auto issued = ps2::vuops::g_dispatch_flags.t - initial_clock;
+                if (issued >= 1'000'000) {
+                    fallback_incomplete = true;
+                    actual_escape = next;
+                    break;
+                }
+                checkpoint.limit = 1'000'000 - issued;
+                ps2::vu::g_fast_checkpoint = &checkpoint;
+                ps2::vu::run_fast(1, next);
+                ps2::vu::g_fast_checkpoint = nullptr;
+                if (!checkpoint.complete) {
+                    fallback_incomplete = true;
+                    actual_escape = checkpoint.pc;
+                }
+            }
             ++continuations;
+            if (fallback_incomplete) break;
         }
         ps2::vu::g_capture = nullptr;
-        complete = actual_escape < 0;
-        reason = complete ? "complete" : "continuation_limit";
+        complete = actual_escape < 0 && !fallback_incomplete;
+        reason = complete ? "complete" : fallback_incomplete ? "instruction_limit" : "continuation_limit";
         pc = complete ? ps2::vu::regs(1).tpc : static_cast<unsigned>(actual_escape);
     } else {
         ps2::vu::g_fast_checkpoint = &checkpoint;

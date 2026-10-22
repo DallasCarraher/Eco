@@ -27,7 +27,7 @@ a = sys.argv
 out = Path(a[a.index('--frames-dir')+1])
 card = Path(a[a.index('--memcard')+1])
 assert not card.exists()
-assert not any(k.startswith('PS2_') and k not in {'PS2_WINDOW_FULL', 'PS2_GS', 'PS2_VU_INTERPRET', 'PS2_GS_COMPARE', 'PS2_VU_CHECK'} for k in os.environ)
+assert not any(k.startswith('PS2_') and k not in {'PS2_WINDOW_FULL', 'PS2_GS', 'PS2_VU_INTERPRET', 'PS2_GS_COMPARE', 'PS2_VU_CHECK', 'PS2_VU_CHECK_CONTINUATIONS'} for k in os.environ)
 assert os.environ['PS2_WINDOW_FULL'] == '1'
 card.write_bytes(b'fresh synthetic card')
 Path('settings.json').write_text(__import__('json').dumps({k:v for k,v in os.environ.items() if k.startswith('PS2_')}))
@@ -320,6 +320,50 @@ class Experiments(unittest.TestCase):
         self.manifest.write_text(json.dumps(self.m))
         with self.assertRaises(ValueError):
             runner.manifest_read(self.manifest)
+
+    def test_bounded_chain_outcomes(self):
+        complete = '[vu-chain-outcomes] attempted 2 complete 2 mismatch 0 budget_exhausted 0 unsupported 0 unchecked_tail_dispatches 0 checkpoints 40 continuations 10000\n'
+        parsed = runner.parse_log(complete, 'cpu', 510, 0)
+        self.assertTrue(parsed['chain_comparison_complete_for_attempted'])
+        self.assertEqual(parsed['chain_comparison_outcomes']['complete_match'], 2)
+        self.assertIsNone(parsed['chain_comparison_counts'])
+        for label, counts in [('mismatch', '0 1 0 0'), ('budget', '0 0 1 0'), ('unsupported', '0 0 0 1')]:
+            a, b, c, d = counts.split()
+            log = f'[vu-chain-outcomes] attempted 1 complete {a} mismatch {b} budget_exhausted {c} unsupported {d} unchecked_tail_dispatches 3 checkpoints 32 continuations 8192\n'
+            self.assertFalse(runner.parse_log(log, 'cpu', 510, 0)['chain_comparison_complete_for_attempted'], label)
+        for log, code in [(complete, 1), (complete+complete, 0), ('', 0), (complete.replace('attempted 2', 'attempted 3'), 0)]:
+            self.assertIsNone(runner.parse_log(log, 'cpu', 510, code)['chain_comparison_outcomes'])
+
+    def test_malformed_chain_outcome_markers(self):
+        complete = '[vu-chain-outcomes] attempted 1 complete 1 mismatch 0 budget_exhausted 0 unsupported 0 unchecked_tail_dispatches 0 checkpoints 1 continuations 0\n'
+        for malformed in ('[vu-chain-outcomes] attempted 1 complete 0 mismatch 1',
+                          '[vu-chain-outcomes]',
+                          complete.rstrip() + ' trailing text'):
+            for log in (malformed, complete + malformed, malformed + '\n' + complete):
+                with self.subTest(log=log):
+                    parsed = runner.parse_log(log, 'cpu', 510, 0)
+                    self.assertIsNone(parsed['chain_comparison_outcomes'])
+                    self.assertIsNone(parsed['chain_comparison_complete_for_attempted'])
+
+    def test_explicit_chain_policy_setting(self):
+        env = self.m['variants'][0]['environment']
+        env['PS2_VU_CHECK'] = 'all'
+        for value in ('8192', '16384'):
+            env['PS2_VU_CHECK_CONTINUATIONS'] = value
+            self.manifest.write_text(json.dumps(self.m))
+            runner.manifest_read(self.manifest)
+        report = self.run_batch()
+        case = report['results'][0]
+        settings = json.loads((self.output/case['directory']/'settings.json').read_text())
+        self.assertEqual(settings['PS2_VU_CHECK_CONTINUATIONS'], '16384')
+        for value in ('32768', 'unlimited', 16384):
+            env['PS2_VU_CHECK_CONTINUATIONS'] = value
+            self.manifest.write_text(json.dumps(self.m))
+            with self.assertRaises(ValueError): runner.manifest_read(self.manifest)
+        env['PS2_VU_CHECK_CONTINUATIONS'] = '16384'
+        env['PS2_VU_CHECK'] = '1'
+        self.manifest.write_text(json.dumps(self.m))
+        with self.assertRaises(ValueError): runner.manifest_read(self.manifest)
 
     def test_manifest_validation(self):
         original = copy.deepcopy(self.m)

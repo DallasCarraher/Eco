@@ -16,6 +16,7 @@
 *.ps2
 *.p2s
 *.log
+vu-chain-*.txt
 .DS_Store
 /assets/
 /iso_data/
