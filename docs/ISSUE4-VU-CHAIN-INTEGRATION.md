@@ -1,5 +1,9 @@
 # Issue 4: production bounded comparison outcomes
 
+The subsequent [focused handoff review](ISSUE4-VU-HANDOFF-REVIEW.md) adds enclosing
+context, capture-policy and active-pipeline regressions and scopes the remaining
+real-queue integration experiment.
+
 `PS2_VU_CHECK=all` now uses the validated checkpoint mechanism in the production
 dispatcher. A finite invocation exceeding the default 8,192-continuation
 comparison budget reports **budget_exhausted** rather than aborting. Complete
