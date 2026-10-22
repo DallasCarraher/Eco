@@ -2,17 +2,53 @@
 
 ## Current result
 
-The read-only prerequisite cycle on 2026-10-22 verified the local disc against
-the archived Eco report and all four CPU frame-480/510 capture hashes. It found
-no PCSX2 candidate on PATH, in scoped standard app/data locations or via a
-Spotlight filename query. No BIOS was selected. This is a scoped inventory,
-not proof that the user has no emulator or BIOS elsewhere. **Reference execution
-and capture are blocked on their local paths.** The user has been asked for them.
-Nothing was installed, launched or reconfigured; no independent capture exists.
+The 2026-10-22 setup/reference cycle downloaded the official stable **PCSX2
+2.8.2** macOS release into ignored local storage. GitHub's release-asset SHA-256
+matched; deep/strict code-signature verification passed and Gatekeeper accepted
+the notarized Developer ID. The x86-64 binary ran using existing Rosetta on this
+arm64 macOS 26.6.2 host; bundle minimum OS is 11.0. Sources:
+[official release](https://github.com/PCSX2/pcsx2/releases/tag/v2.8.2) and
+[requirements](https://pcsx2.net/docs/setup/requirements/).
+
+The supplied BIOS directory had one ROM candidate. Read-only ROM-directory
+inspection, private hashes and PCSX2's successful BIOS load established local
+suitability for this setup; the original files were preserved and their hashes
+rechecked. No additional BIOS or game data was downloaded. A **new inventory**
+verified the disc and all four Eco anchors, leaving the earlier inventory intact.
+Executable help/version and isolated configuration initialization were verified.
+
+**No independent image or visual alignment was obtained.** There was one paused
+initialization (zero recorded play seconds), followed by one no-input game pass
+with a 45-second supervisor limit and clean exit after TERM. App-control requests
+timed out twice. The fallback built-in framebuffer dump produced zero files:
+the setup configured only the hardware dump directory, but this build requires
+both hardware and software dump directories. Its log explicitly disabled dumping.
+This was a configuration error, not evidence about image correctness. The failed
+settings and logs remain preserved. Both private directories are now configured;
+original preflight tooling and PCSX2's `-testconfig` accept the correction. No
+second game pass was attempted.
+
+Private evidence root: `local/reference-setup-20261022/`:
+
+- `provenance.json`, `release.json`: download, signature, compatibility and BIOS
+  inspection evidence; input identities stay private.
+- `inventory/inventory.json`: new selected-emulator/BIOS inventory.
+- `jobs/*.json`, `jobs/*.done`, `jobs/*.log`: exact argv, exit codes, limits and
+  timings, including the failed configuration initialization.
+- `capture-settings.ini`, `after-capture.ini`, `corrected-capture-settings.ini`:
+  preserved attempted settings and prepared correction. Actual renderer,
+  game-fix/patch warnings and timing observations are in `capture-reference.log`.
+- `initial-card.json`, `cycle-result.json`: new erased-card identity, artifact
+  hashes, no-input setup and failed capture result. Card, BIOS working copies,
+  configuration and captures stay ignored. Lossless PNG previews of the two Eco
+  anchors are labeled previews; original PPMs remain unchanged.
+- `preflight-failed/preflight.json`, `preflight-corrected/preflight.json`: expected
+  rejection (exit 2) and corrected configuration acceptance (exit 0).
 
 Worktree: `/Users/dallascarraher/Developer/Eco-startup-reference`, branch
 `codex/issue-5-startup-reference`, based on merged #10 (`7ef6532`). Existing
-checkouts/builds/translations/evidence remain unchanged.
+checkouts/builds/translations/evidence remain unchanged. Neither Eco output nor
+PCSX2 agreement would establish PS2 hardware correctness.
 
 ## Verified Eco anchor
 
@@ -51,13 +87,15 @@ verify CLI version or capture support. Disc mismatch or changed anchor bytes fai
 the inventory. BIOS details, disc hashes, paths, configuration and screenshots
 stay in ignored local storage. Do not acquire firmware or disc images elsewhere.
 
-## One-event capture procedure, after prerequisites are available
+## One-event capture procedure for a separately admitted continuation
 
 1. Renew shared admission and acquire the common cross-checkout serial lock.
    Inspect the installed build's help/version and verify its executable hash;
    no capabilities are established merely by these online instructions.
-2. Create a **new private application-data directory**. Identify the selected
-   user BIOS and same disc by hash. Do not alter the user's global emulator
+2. Create a **new private application-data directory**. Create the parent passed
+   to `-datapath` first: PCSX2 2.8.2 appends `PCSX2/` and does not recursively
+   create a missing parent. The first attempt otherwise shows a modal error.
+   Identify the selected user BIOS and same disc by hash. Do not alter the user's global emulator
    configuration, reuse an unrelated save state/card or automatically copy a
    personal configuration. Record any setup work inside the private directory.
 3. Record build/version, BIOS identity, renderer/backend, resolution, interlacing,
@@ -97,27 +135,80 @@ time limit. After local help/setup verification, the launch shape is:
   -fastboot -batch -nofullscreen -- "$USER_ISO"
 ```
 
-This is a protocol template, not an executed command or unattended capture tool.
+This is a protocol template; the executed variant is recorded below and privately.
 Use private paths and the external bounded supervisor. Do not leave a game running
 while waiting for model input. No runtime/browser/GS/input fix belongs in this track.
 
+## Framebuffer configuration gate
+
+`scripts/reference_capture_preflight.py` checks a private PCSX2 2.8.2 INI without
+launching it. This is a narrow gate for the built-in framebuffer dump path; it
+never verifies capture capability, input semantics, effective game overrides or
+visual alignment. It requires both existing private dump directories, enabled
+frame dumping and a finite frame range. PCSX2's own
+[`GSOptions::LoadSave`](https://github.com/PCSX2/pcsx2/blob/v2.8.2/pcsx2/Pcsx2Config.cpp)
+disables `DumpGSData` if either directory is empty, even for a hardware renderer.
+The dump saves framebuffer textures before display composition, so it is not an
+emulator screenshot or raw PS2 hardware output. Local executable behavior must
+still confirm output creation early in a future pass.
+
+Executed commands below use variables for private inputs. Exact expanded argv
+and the attempted settings are retained in the private jobs and result manifest:
+
+```sh
+python3 scripts/reference_inventory.py --output "$PRIVATE/inventory" \
+  --eco-report "$ECO_REPORT" --iso "$USER_ISO" \
+  --emulator "$PCSX2_APP" --bios "$USER_BIOS"
+"$PCSX2_EXE" -datapath "$PRIVATE/data" -help
+"$PCSX2_EXE" -datapath "$PRIVATE/data" -version
+"$PCSX2_EXE" -earlyconsolelog -datapath "$PRIVATE/data" -testconfig
+# Actual game pass: external serial supervisor imposed a 45-second limit.
+"$PCSX2_EXE" -earlyconsolelog -datapath "$PRIVATE/data" \
+  -logfile "$PRIVATE/capture-reference.log" -fastboot -batch -nofullscreen \
+  -- "$USER_ISO"
+python3 -m unittest discover -s scripts -p test_reference_capture_preflight.py -v
+python3 scripts/reference_capture_preflight.py --private-root "$PRIVATE" \
+  --config "$PRIVATE/capture-settings.ini" --output "$PRIVATE/preflight-failed"
+python3 scripts/reference_capture_preflight.py --private-root "$PRIVATE" \
+  --config "$PRIVATE/corrected-capture-settings.ini" --output "$PRIVATE/preflight-corrected"
+```
+
+All three synthetic tests passed. The negative check reproduced the real missing
+software-directory failure. Corrected native configuration initialization exited
+0 with no dump-directory warning. That does not demonstrate a working capture.
+The BIOS companions were copied only into the private setup so emulator writes
+could not affect the supplied originals. Configuration snapshots describe the
+controller bindings, card, renderer and compatibility choices; inspect them and
+the effective log before treating a later capture as comparable.
+
 ## Shared accounting and continuation
 
-Released inventory ledger:
-`Eco-artifact-audit/local/artifact-audit-20261021/reference-inventory-allocation.json`.
-It carries **7,492.477 s** and adds **1.093 s**, totaling **7,493.570 / 14,400 s**.
-Shared retained/sampled peak: **3,841,499,866 bytes**; private temporary peak: zero;
-free disk: **20,438,642,688 bytes**. Between-poll peaks remain unmeasured. Reservation:
-60 s active, 16 MiB retained / 128 MiB peak. Private inventory/logs are under
-`local/reference-inventory/`. These values are historical, not a new capture slot.
+Latest released ledger:
+`Eco-artifact-audit/local/artifact-audit-20261021/reference-setup-allocation.json`.
+Prior inventory debit: **7,493.570 s**. This cycle: **189.656 s**, including a
+conservative recovery debit for the first configuration timeout and 5 s for
+out-of-queue surface discovery/preview conversion. Cumulative: **7,683.226 /
+14,400 s**, leaving **6,716.774 s**. Reservation was 1,500 s active, 768 MiB
+retained / 1 GiB peak, under the common `serial.lock`; it is now released.
 
-The user-authorized shared cap is **8 GiB**, superseding older 2 GiB prose. Time
-does not reset with a chat, branch or issue. Preserve all evidence, remeasure
-before adding artifacts, keep >=10 GiB free, run serially, and limit every
-subprocess to <=900 s. Weekly account usage must remain above the user's
-85%-remaining stop threshold; check between stages. Do not run the overnight matrix.
+Shared retained/sampled peak: **3,994,692,762 bytes**; private temporary sampled
+peak: zero; free disk: **13,663,531,008 bytes**. Between-poll peaks and external
+system/Rosetta caches are unmeasured. The first timeout's TERM stopped PCSX2;
+a subsequent group KILL returned EPERM, interrupting supervisor accounting.
+A fresh process census verified no survivors before accounting recovery and
+lock reacquisition. The later game timeout and shutdown completed normally.
 
-Smallest next action: obtain the two prerequisite paths, verify the selected build
-and BIOS privately, and establish its isolated capture facility. A compact
-[continuation prompt](agent-prompts/03-startup-reference.md) supports a fresh chat;
-that transition must carry this evidence and ledger forward rather than restart work.
+The user-authorized shared cap is **8 GiB**, superseding older 2 GiB prose.
+Remeasure before another allocation; keep >=10 GiB free, run serially, and limit
+every subprocess to <=900 s. The cap and cumulative debit never reset by chat,
+branch or issue. Weekly usage was checked at startup and between stages: 96%
+remained throughout; stop at 85% remaining. No overnight matrix was run.
+
+Smallest next step: a **separately authorized/admitted** short no-input capture
+pass using both corrected private dump directories, with a fresh erased card
+and a new output/data directory. Confirm that the first framebuffer files are
+actually written; stop early if not. Recheck configuration/compatibility warnings
+and record effective settings. Then align the scene visually using Eco 480 as
+context for 510, without assuming matching counters. There is no event description,
+reference frame identity or image hash to hand #3 yet. No missing software/BIOS
+prerequisite remains; working capture and event alignment remain unverified.
