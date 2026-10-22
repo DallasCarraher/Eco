@@ -5,9 +5,10 @@ context, capture-policy and active-pipeline regressions and scopes the remaining
 real-queue integration experiment.
 The [real GIF queue follow-up](ISSUE4-VU-GIF-QUEUE.md) passes that native boundary
 test and identifies browser worker execution as the remaining focused check.
-The [bounded browser attempt](ISSUE4-VU-BROWSER.md) executes the fixture in a Wasm
-worker but remains incomplete because required checked-outcome summaries are not
-captured; its strict assertion fails and the PR remains a draft.
+The [browser worker validation](ISSUE4-VU-BROWSER.md) now passes both complete and
+budget cases after correcting fixture environment timing. Exact native outputs
+and positive checked-outcome summaries are verified without rebuilding the Wasm.
+The report preserves the initial failed attempts and remaining scope limits.
 
 `PS2_VU_CHECK=all` now uses the validated checkpoint mechanism in the production
 dispatcher. A finite invocation exceeding the default 8,192-continuation

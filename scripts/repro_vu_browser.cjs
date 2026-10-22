@@ -4,12 +4,21 @@ const path = require('node:path');
 const http = require('node:http');
 const {chromium} = require(process.argv[3]);
 const output = path.resolve(process.argv[2]);
-const modes = ['plain-short', 'plain-long', 'complete', 'budget'];
+const build = path.resolve(process.argv[4] || path.join(output, 'build'));
+const allowedModes = ['plain-short', 'plain-long', 'complete', 'budget'];
+const modes = process.argv[5] ? [process.argv[5]] : allowedModes;
+if (modes.some(mode => !allowedModes.includes(mode))) throw Error('Unknown fixture mode');
 const html = mode => `<!doctype html><meta charset="utf-8"><title>Original VU fixture</title>
 <script>
 window.fixture = {messages: [], errors: [], done: false};
 window.Module = {
   noInitialRun: true,
+  // Emscripten caches libc's environment during initialization. Setting ENV in
+  // onRuntimeInitialized is too late for worker-side getenv in this fixture.
+  preRun: [() => {
+    if (${JSON.stringify(mode)} === 'complete' || ${JSON.stringify(mode)} === 'budget') Module.ENV.PS2_VU_CHECK = 'all';
+    Module.ENV.PS2_VU_JIT = '0';
+  }],
   print: s => fixture.messages.push(s), printErr: s => fixture.messages.push(s),
   onAbort: s => { fixture.errors.push(String(s)); fixture.done = true; },
   onExit: code => {
@@ -24,8 +33,6 @@ window.Module = {
     fixture.done = true;
   },
   onRuntimeInitialized: () => {
-    if (${JSON.stringify(mode)} === 'complete' || ${JSON.stringify(mode)} === 'budget') Module.ENV.PS2_VU_CHECK = 'all';
-    Module.ENV.PS2_VU_JIT = '0';
     Module.callMain(['/code.bin', ${JSON.stringify(mode)}, '/final']);
   }
 };
@@ -41,7 +48,7 @@ const server = http.createServer((req, res) => {
   }
   const name = path.basename(url.pathname);
   if (!/^vu_worker\.(js|wasm|data|worker\.js)$/.test(name)) { res.writeHead(404).end(); return; }
-  const file = path.join(output, 'build', name);
+  const file = path.join(build, name);
   if (!fs.existsSync(file)) { res.writeHead(404).end(); return; }
   res.setHeader('Content-Type', name.endsWith('.js') ? 'application/javascript' : name.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream');
   fs.createReadStream(file).pipe(res);
@@ -61,6 +68,7 @@ const server = http.createServer((req, res) => {
         await page.goto(`http://127.0.0.1:${server.address().port}/?mode=${mode}`);
         await page.waitForFunction(() => window.fixture?.done, undefined, {timeout: 60000});
         const result = await page.evaluate(() => ({...fixture, isolated: crossOriginIsolated}));
+        result.console_messages = consoleMessages;
         result.errors.push(...errors);
         if (!result.isolated) result.errors.push('Cross-origin isolation missing');
         const dir = path.join(output, mode); fs.mkdirSync(dir);

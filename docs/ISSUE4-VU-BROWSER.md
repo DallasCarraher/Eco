@@ -1,12 +1,12 @@
 # Issue 4: bounded browser worker attempt
 
-**Browser comparison validation remains incomplete.** The original fixture runs
-successfully in a Wasm pthread in headless Chrome, but the harness does not capture
-the required checked-outcome summaries. Its strict assertion fails instead of
-reporting complete coverage. No VU runtime behavior or comparison expectation was
-changed. PR #10 remains a draft.
+**Focused browser comparison validation now passes for the compiled fixture.**
+The follow-up below fixes fixture environment timing and verifies both complete
+and budget outcomes using the existing read-only Wasm build. No VU runtime
+behavior or comparison expectation changed. The initial failed cycle remains
+documented as history; PR #10 remains a draft.
 
-## Observations
+## Initial observations (preserved history)
 
 `scripts/repro_vu_browser.py` builds the real runtime privately, reuses the original
 two-kick program generator and real GIF queue driver, and verifies native source
@@ -64,7 +64,7 @@ Final browser evidence: `validation-exceptions/browser.json`. Native reference:
 the [real queue fixture](ISSUE4-VU-GIF-QUEUE.md), with unchanged source hashes and
 byte-identical regenerated original program/code.
 
-## Limits and smallest next experiment
+## Initial limits and selected next experiment (history)
 
 The user requested frequent weekly-usage checks and stopping at **85% remaining**.
 The account tool reported **92% remaining** at admission and **91% remaining** at
@@ -97,3 +97,68 @@ No game inputs, game boot, rendering validation, overnight matrix, concurrent
 consumer/backpressure test, JIT validation or independent PS2 correctness result
 was produced. Neither path is an oracle. Native queue success and worker guest
 execution do not close the browser comparison/outcome coverage gap.
+
+## Follow-up: environment timing fixed, both checked cases verified
+
+The raw-console-only complete-mode probe reproduced missing outcome evidence.
+Source inspection of the generated Emscripten loader showed cached environment
+strings. The fixture had set `Module.ENV` in `onRuntimeInitialized`, after libc
+initialization. Moving the diagnostic settings into **`preRun`** makes worker-side
+`getenv` observe them. The same unchanged Wasm then emits both result and summary
+markers. This is a fixture configuration fix, not a VU execution change.
+
+The collector now retains raw page console alongside callback messages and can
+select one mode against an existing build. A separate complete-mode probe and
+budget-mode probe both pass in **Chrome 155.0.8059.86**, each in a fresh isolated
+context and a confirmed Wasm pthread. Captured result lines report all five exact
+comparison dimensions equal. Summary evidence:
+
+| Mode | Attempted | Complete | Budget | Checkpoints | Compared continuations | Unchecked dispatches |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Complete | 1 | 1 | 0 | 1 | 2 | 0 |
+| Budget | 1 | 0 | 1 | 32 | 8,192 | 1,808 |
+
+Both summaries have zero mismatches and unsupported outcomes. Every final output
+(raw registers, 16 KiB memory, captured packets, semantic flag/Q pipe, and queued
+payloads) matches both the corresponding checked native case and its plain native
+control exactly. The fixture's literal counter/Q/end and two ordered, owned GIF
+packet assertions also pass. The budget result remains incomplete comparison
+coverage even though the guest finishes normally. JIT fallback is not exercised.
+
+Commands, from the investigation checkout (create each output directory first):
+
+```sh
+node scripts/repro_vu_browser.cjs local/vu-browser-logs/complete-env \
+  /Users/dallascarraher/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright \
+  local/vu-browser/validation-exceptions/build complete
+node scripts/repro_vu_browser.cjs local/vu-browser-logs/budget-env \
+  /Users/dallascarraher/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright \
+  local/vu-browser/validation-exceptions/build budget
+python3 local/vu-browser-logs/verify.py
+```
+
+The final command asserts worker/isolation/exit evidence, exact full summary
+counts, positive exact-result markers and all output equalities. All three exit
+0. Evidence is in each probe's `browser.json`, the per-case output files,
+`local/vu-browser-logs/verification.json`, and `jobs/`. Build hashes were sealed
+before reuse in `build-hashes.json` and verified unchanged afterward. No rebuild
+or archived-output overwrite occurred. The initial raw-console probe is retained
+separately in `local/vu-browser-logs/complete/`. A console-only 404 for the missing
+favicon is retained; neither checked page reports an abort or page exception.
+
+The released allocation is
+`Eco-artifact-audit/local/artifact-audit-20261021/coverage-browser-logs-allocation.json`.
+It reserves 60 seconds active, 16 MiB retained / 128 MiB peak, carries
+**7,473.838 seconds** forward and adds **3.480 seconds**:
+**7,477.318 / 14,400 seconds** cumulative active debit. Shared retained bytes:
+**3,766,574,950**; sampled aggregate peak: **3,773,338,410**; private temporary
+peak: **6,805,690 bytes**. Between-poll peaks remain unmeasured. Free disk:
+**24,741,810,176 bytes**, above 10 GiB. Weekly usage was checked at admission and
+between stages and stayed above the user's stop threshold. No subagents were used.
+
+The selected focused native/browser fixture cycle is complete. The earlier
+missing-summary blocker is resolved; another repeat of this fixture is not the
+next useful investigation. PR review can now assess the bounded mechanism with
+native and browser worker evidence. Concurrent consumer/backpressure, JIT fallback,
+full game execution, rendering and independent PS2 correctness remain separate,
+unmeasured scopes rather than implied passes from this test.
