@@ -1,6 +1,94 @@
 # Startup reference protocol: boot-idle scene near Eco frame 510
 
-## Current result: frame-510 sequence identified as Naughty Dog intro
+## Current result: phase bracket measured; exact pose not observed
+
+The saved image-identical Eco frame-510 RAM contains a coordinated phase for
+all five intro channels: logo, camera animation, volumes, Jak and Daxter. Each
+has local animation frame **43.818359375**, bits **`0x422f4600`**, interpolation
+zero, speed 0.5, artist base 115 and artist step 1. Group names identify the
+corresponding `ndi-intro` animations. The streamed part/artist base is necessary:
+a local frame number alone could refer to a different part.
+
+One fresh isolated PCSX2 reference probe read these inputs through its local PINE
+socket while normal no-input startup ran. It recorded **477 phase observations**,
+saved two new states and stopped cleanly after **23.196 s** (23.396 s supervised
+job time). No guest RAM write, state load, controller input, turbo or forced
+phase adjustment was used. The socket stayed inside a private mode-0700 directory.
+The existing verified build/disc/BIOS were reused, with fresh data and erased card.
+
+The same streamed part has adjacent coherent observed phases **43.583984375**
+and **44.052734375**. Eco's target lies exactly between them, **0.234375** from
+either. No exact target phase was observed in this pass. The two saved-state RAM
+phases are 39.013671875 and 44.052734375; they were decoded after saving, not
+inferred from request time. The latter matches all five channel records in group
+identity, speed, artist base/step, command and interpolation; **only frame bits
+differ**, +0.234375 on all five channels. **Exact-pose alignment remains false.**
+These observations do not prove that every possible reference run has this grid.
+
+Private evidence: `local/reference-pose-20261022/`:
+
+- `target-pose.json`: Eco input records and verified retail symbol locators.
+- `probe.json`, `phase-observations.json`: bounded process, state requests and
+  timestamped coherent phase observations.
+- `phase-result.json`: saved-state RAM marker verification, exact-bit rejection,
+  channel differences, hashes, commands, limitations and comparison metadata.
+- `data/PCSX2/sstates/`: two untouched private states, each containing
+  `eeMemory.bin` and `Screenshot.png`; extracted screenshots remain local.
+- `phase-comparison.png`: labeled **phase-bracketed context**, explicitly not an
+  exact-pose match. Eco is 512×448; the reference saved-state screenshot is
+  640×480, aspect-corrected by PCSX2. The layout adds padding/labels only, with
+  no further crop/scale. No cross-image pixel metric or tolerance was applied.
+- `capture-settings.ini`, `reference.log`, `jobs/`: requested/effective settings,
+  warnings, exact expanded commands, exits and timing. Prior evidence is intact.
+
+Original `scripts/reference_pose.py` reads the five retail joint-control inputs
+and supplies bounded PINE memory reads. Six synthetic tests passed, covering
+fragmented/error/truncated protocol replies, read bounds, linked channels,
+invalid camera links and preservation of a one-bit phase difference. Existing
+marker/preflight suites and completed native/WASM fixtures were not repeated.
+Pinned upstream [PINE code](https://github.com/PCSX2/pcsx2/blob/v2.8.2/pcsx2/PINE.cpp)
+and [saved-state screenshot implementation](https://github.com/PCSX2/pcsx2/blob/v2.8.2/pcsx2/SaveState.cpp)
+were inspected before use. State requests save host artifacts; they do not set
+the guest animation phase. Saved-state screenshots are emulator memory snapshots,
+not raw GS targets or hardware output.
+
+Executed command shapes below use variables for private paths; exact argv,
+settings and the private bounded controller are retained locally:
+
+```sh
+python3 "$PRIVATE/read-eco.py"
+python3 -m unittest discover -s scripts -p test_reference_pose.py -v
+python3 "$PRIVATE/prepare.py"
+python3 scripts/reference_capture_preflight.py --private-root "$PRIVATE" \
+  --config "$PRIVATE/capture-settings.ini" --output "$PRIVATE/preflight"
+"$PCSX2_EXE" -earlyconsolelog -datapath "$PRIVATE/data" -testconfig
+# Controller launches one game, uses read-only PINE memory queries and at most
+# three new state-save slots, then always terminates/reaps the process.
+python3 "$PRIVATE/probe.py"
+python3 "$PRIVATE/analyze-states.py"
+"$BUNDLED_PYTHON" "$PRIVATE/present.py"
+```
+
+Latest released ledger:
+`Eco-artifact-audit/local/artifact-audit-20261021/reference-pose-20261022-allocation.json`.
+Prior cumulative **7,941.788 s** + this cycle **37.395 s** = **7,979.183 /
+14,400 s**, leaving **6,420.817 s**. Reservation: 600 s active, 192 MiB retained /
+256 MiB peak. Shared retained/sampled peak **4,153,755,479 bytes**; free disk
+**12,484,788,224 bytes**; private temporary sampled peak zero. Between-poll peaks
+and external caches remain unmeasured. Common lock released and emulator stopped.
+Weekly remaining was 90% at admission and 89% after analysis, above the 85%
+stop threshold. Original Eco RAM/state hashes and supplied BIOS hashes were
+rechecked unchanged. No new game assets or executable were downloaded.
+
+The next named question is **how streamed-audio position sampling produces the
+half-step phase offset**. OpenGOAL's retail loader logic drives this animation
+from `current-str-pos`, not a display-frame offset. Inspect the saved audio-position
+and phase inputs before proposing further execution. Do not silently select the
+nearest pose, blend screenshots, change timing or write a forced phase to call
+this exact. No runtime expectation, tolerance or mismatch suppression changed;
+neither this comparison nor emulator agreement establishes PS2 hardware truth.
+
+## Historical sequence identification (before phase measurement)
 
 A narrow diagnostic with the archived CPU binary reproduced both the original
 Eco **480 and 510 PPM SHA-256 hashes exactly**. Its terminal RAM identifies the

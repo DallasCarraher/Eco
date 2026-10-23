@@ -1,59 +1,59 @@
-# Continue issue #5: frame 510 is ndi-intro; exact pose remains unaligned
+# Continue issue #5: ndi-intro phase bracket measured, exact pose unverified
 
-Repository DallasCarraher/Eco, worktree
+Repository DallasCarraher/Eco; worktree
 `/Users/dallascarraher/Developer/Eco-startup-reference`, branch
-`codex/issue-5-startup-reference`, draft PR #11. Preserve all inputs, builds,
-translations, captures and ledgers. Read applicable AGENTS.md, README.md,
-docs/REFERENCE.md and the revised roadmap/work queue (use the roadmap-audit
-worktree if absent here). Never request Copilot review without explicit owner
-instruction. PRs #9/#10 completed VU work and focused native/browser checks;
-do not repeat them.
+`codex/issue-5-startup-reference`, draft PR #11. Preserve all builds, inputs,
+translations, captures, states and ledgers. Read applicable AGENTS.md, README,
+REFERENCE.md and the revised roadmap/work queue (roadmap-audit worktree if needed).
+Never request Copilot review without explicit owner instruction. Do not repeat
+merged VU/native/browser work or start an alternate port by default.
 
-New result: a frozen CPU diagnostic reproduced BOTH archived frame-480/510 PPM
-hashes exactly. Terminal frame-510 RAM identifies active logo state `ndi`,
-anim `ndi-intro`, spool index 3/parts 4, and active art stream `ndi-intro`.
-Thus the named event is the **Naughty Dog intro**, not the later title logo.
-Frame 480 is image-identical context, without a separate state snapshot.
+Eco frame510 is `ndi-intro` (Naughty Dog intro), established by a frozen CPU
+replay that exactly reproduced archived frame480/510 PPM hashes. Saved RAM has
+five coordinated channels: logo, camera-anim, volumes, Jak, Daxter. Their local
+frame is **43.818359375 / 0x422f4600**, interpolation zero, speed .5, artist
+base115 and step1. Original group names and exact bits are in target-pose.json.
 
-**Exact pose alignment is still unverified.** The existing PCSX2 capture includes
-this sequence; GS900/1200 are labeled context, not claimed equivalent poses.
-Native targets differ: Eco 512x448, selected PCSX2 intro targets 512x224 before
-display composition. The comparison uses native-size RGB tiles with padding and
-labels only. No counter offset, cross-pose pixel comparison/tolerance or PS2
-hardware-correctness claim is permitted. The earlier Sony match (Eco25/100 vs
-reference330) remains exact but cannot be extrapolated.
+Latest authorized reference probe: one fresh isolated PCSX2 startup process,
+normal pacing/no guest input, private local PINE socket, read-only guest-memory
+queries and two host state saves. No state load or guest RAM write. It stopped
+cleanly after 23.196s and recorded 477 phase observations. In the same streamed
+part, adjacent coherent phases are **43.583984375** and **44.052734375**. Eco's
+phase lies halfway between them, ±0.234375. No exact phase was observed.
+Saved-state RAM confirms phases39.013671875/44.052734375. Later state's five
+channel records match Eco in group/speed/base/step/command/interpolation; ONLY
+frame bits differ (+0.234375). **Do not call this exact-pose aligned.** This one
+pass does not prove the same grid occurs on every possible reference run.
 
-Current private evidence `local/reference-marker-20261022/`: result.json,
-markers-510/markers.json, replay-identity.json, validated-replay/,
-sequence-comparison.png and jobs/. Raw RAM/images, settings, hashes and paths
-stay ignored/local. Original decoder scripts/reference_event_markers.py has
-four passing synthetic tests and validates retail symbol/type and active-tree
-links; GOAL's false terminator is nonzero. First historical frame600 RAM was
-used for decoder development only. The first new CPU replay lacked a pre-created
-capture directory; the corrected repeat passed exact hashes. Both RAM dumps and
-failed postprocessor logs remain preserved. Two CPU replays, no PCSX2 launch,
-rebuild, GPU comparison or VU reinvestigation occurred.
+Latest private evidence `local/reference-pose-20261022/`: target-pose.json,
+probe.json, phase-observations.json, phase-result.json, capture-settings.ini,
+reference.log, jobs/, saved states under data/PCSX2/sstates/, extracted screenshots
+and phase-comparison.png. The latter is labeled phase-bracketed context, not an
+exact match. Eco512x448, PCSX2 state screenshot640x480 already aspect-corrected by
+emulator; layout adds padding/labels only. No crop/scale/tolerance/pixel assertion.
+All images/RAM/BIOS/disc/settings stay ignored/local. Original hashes rechecked.
 
-Existing independent capture remains local/reference-later-20261022/: 152 PNGs,
-124 unique, GS180..2385, Sony through title/Press Start. Official PCSX2 2.8.2,
-provided BIOS and disc are already verified. No new download/BIOS search needed.
+Original reference_pose.py supplies bounded PINE reads and retail five-channel
+pose input extraction; six synthetic tests pass (protocol/read bounds, linked
+channels, invalid link, one-bit phase distinction). No native/browser rebuild
+or VU investigation. PCSX2 2.8.2 is already verified; no download or BIOS search
+needed. Earlier reference/marker/inventory evidence remains historical.
 
 Latest released ledger:
-`/Users/dallascarraher/Developer/Eco-artifact-audit/local/artifact-audit-20261021/reference-marker-20261022-allocation.json`.
-Cumulative **7,941.788 / 14,400 s**, remaining **6,458.212 s**. Shared retained/
-sampled peak **4,113,836,817 bytes**, free **11,905,126,400 bytes**. Marker active
-reservation was 300 s, 64 MiB retained/128 MiB peak; retained growth 77,080,143 bytes
-exceeded retained estimate after preserving both RAM dumps but stayed inside
-peak/shared cap. Prior read-only reservation added no queued subprocess debit.
-Lock released and no game running. Recheck newer allocations/usage/storage before
-any new admission. Shared cap 8 GiB, >=10 GiB free, <=900 s/subprocess, serial
-diagnostics, no budget reset. Weekly remaining last 91%; stop at 85%. No subagents,
-overnight matrix, API/model calls in replay tools or messages to other sessions.
+`/Users/dallascarraher/Developer/Eco-artifact-audit/local/artifact-audit-20261021/reference-pose-20261022-allocation.json`.
+Cumulative **7,979.183 /14,400 s**, remaining **6,420.817 s**. Shared retained/
+sampled peak **4,153,755,479 bytes**, free **12,484,788,224 bytes**. Reservation
+600s,192MiB retained/256MiB peak; active37.395s. Lock released/emulator stopped.
+Remeasure and inspect newer allocations before admission; shared cap8GiB,
+>=10GiB free, <=900s/subprocess, serial diagnostics, no budget reset. Weekly
+remaining last89%; stop at85% remaining and check between stages. No subagents,
+overnight matrix, model/API calls inside replay programs or session messages.
 
-Next is independently identifying the animation phase/camera pose inside
-`ndi-intro` to choose a truly matching reference image. Do not make another blind
-startup pass or treat semantic sequence identity as same-pose alignment. The
-current comparison supplies a reproducible checkpoint for #3, but no GS/backend
-cause is established. Any further phase-marker diagnostic must be narrowly scoped
-and admitted under the same ledger. No expectations/tolerances/mismatch changes.
-Commit original tooling/docs only and update PR #11 with evidence and limits.
+Next: inspect how streamed-audio position sampling produces the half-step phase
+offset, using the saved RAM/state evidence. Retail loader uses current-str-pos,
+not display counters. Do not make another blind startup capture, silently accept
+a nearest pose, blend images, change timing or force guest phase to claim exact
+alignment. Any new diagnostic needs a narrow hypothesis and renewed admission.
+Keep GS/backend causal attribution unknown and do not claim hardware truth.
+Update PR#11 and current summaries with exact evidence/commands and limits;
+commit original tooling/docs only. OpenGOAL prototype is a later scoped task.
