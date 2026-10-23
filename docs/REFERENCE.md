@@ -1,0 +1,515 @@
+# Startup reference protocol: boot-idle scene near Eco frame 510
+
+## Current result: phase bracket measured; exact pose not observed
+
+The saved image-identical Eco frame-510 RAM contains a coordinated phase for
+all five intro channels: logo, camera animation, volumes, Jak and Daxter. Each
+has local animation frame **43.818359375**, bits **`0x422f4600`**, interpolation
+zero, speed 0.5, artist base 115 and artist step 1. Group names identify the
+corresponding `ndi-intro` animations. The streamed part/artist base is necessary:
+a local frame number alone could refer to a different part.
+
+One fresh isolated PCSX2 reference probe read these inputs through its local PINE
+socket while normal no-input startup ran. It recorded **477 phase observations**,
+saved two new states and stopped cleanly after **23.196 s** (23.396 s supervised
+job time). No guest RAM write, state load, controller input, turbo or forced
+phase adjustment was used. The socket stayed inside a private mode-0700 directory.
+The existing verified build/disc/BIOS were reused, with fresh data and erased card.
+
+The same streamed part has adjacent coherent observed phases **43.583984375**
+and **44.052734375**. Eco's target lies exactly between them, **0.234375** from
+either. No exact target phase was observed in this pass. The two saved-state RAM
+phases are 39.013671875 and 44.052734375; they were decoded after saving, not
+inferred from request time. The latter matches all five channel records in group
+identity, speed, artist base/step, command and interpolation; **only frame bits
+differ**, +0.234375 on all five channels. **Exact-pose alignment remains false.**
+These observations do not prove that every possible reference run has this grid.
+
+Private evidence: `local/reference-pose-20261022/`:
+
+- `target-pose.json`: Eco input records and verified retail symbol locators.
+- `probe.json`, `phase-observations.json`: bounded process, state requests and
+  timestamped coherent phase observations.
+- `phase-result.json`: saved-state RAM marker verification, exact-bit rejection,
+  channel differences, hashes, commands, limitations and comparison metadata.
+- `data/PCSX2/sstates/`: two untouched private states, each containing
+  `eeMemory.bin` and `Screenshot.png`; extracted screenshots remain local.
+- `phase-comparison.png`: labeled **phase-bracketed context**, explicitly not an
+  exact-pose match. Eco is 512×448; the reference saved-state screenshot is
+  640×480, aspect-corrected by PCSX2. The layout adds padding/labels only, with
+  no further crop/scale. No cross-image pixel metric or tolerance was applied.
+- `capture-settings.ini`, `reference.log`, `jobs/`: requested/effective settings,
+  warnings, exact expanded commands, exits and timing. Prior evidence is intact.
+
+Original `scripts/reference_pose.py` reads the five retail joint-control inputs
+and supplies bounded PINE memory reads. Six synthetic tests passed, covering
+fragmented/error/truncated protocol replies, read bounds, linked channels,
+invalid camera links and preservation of a one-bit phase difference. Existing
+marker/preflight suites and completed native/WASM fixtures were not repeated.
+Pinned upstream [PINE code](https://github.com/PCSX2/pcsx2/blob/v2.8.2/pcsx2/PINE.cpp)
+and [saved-state screenshot implementation](https://github.com/PCSX2/pcsx2/blob/v2.8.2/pcsx2/SaveState.cpp)
+were inspected before use. State requests save host artifacts; they do not set
+the guest animation phase. Saved-state screenshots are emulator memory snapshots,
+not raw GS targets or hardware output.
+
+Executed command shapes below use variables for private paths; exact argv,
+settings and the private bounded controller are retained locally:
+
+```sh
+python3 "$PRIVATE/read-eco.py"
+python3 -m unittest discover -s scripts -p test_reference_pose.py -v
+python3 "$PRIVATE/prepare.py"
+python3 scripts/reference_capture_preflight.py --private-root "$PRIVATE" \
+  --config "$PRIVATE/capture-settings.ini" --output "$PRIVATE/preflight"
+"$PCSX2_EXE" -earlyconsolelog -datapath "$PRIVATE/data" -testconfig
+# Controller launches one game, uses read-only PINE memory queries and at most
+# three new state-save slots, then always terminates/reaps the process.
+python3 "$PRIVATE/probe.py"
+python3 "$PRIVATE/analyze-states.py"
+"$BUNDLED_PYTHON" "$PRIVATE/present.py"
+```
+
+Latest released ledger:
+`Eco-artifact-audit/local/artifact-audit-20261021/reference-pose-20261022-allocation.json`.
+Prior cumulative **7,941.788 s** + this cycle **37.395 s** = **7,979.183 /
+14,400 s**, leaving **6,420.817 s**. Reservation: 600 s active, 192 MiB retained /
+256 MiB peak. Shared retained/sampled peak **4,153,755,479 bytes**; free disk
+**12,484,788,224 bytes**; private temporary sampled peak zero. Between-poll peaks
+and external caches remain unmeasured. Common lock released and emulator stopped.
+Weekly remaining was 90% at admission and 89% after analysis, above the 85%
+stop threshold. Original Eco RAM/state hashes and supplied BIOS hashes were
+rechecked unchanged. No new game assets or executable were downloaded.
+
+The next named question is **how streamed-audio position sampling produces the
+half-step phase offset**. OpenGOAL's retail loader logic drives this animation
+from `current-str-pos`, not a display-frame offset. Inspect the saved audio-position
+and phase inputs before proposing further execution. Do not silently select the
+nearest pose, blend screenshots, change timing or write a forced phase to call
+this exact. No runtime expectation, tolerance or mismatch suppression changed;
+neither this comparison nor emulator agreement establishes PS2 hardware truth.
+
+## Historical sequence identification (before phase measurement)
+
+A narrow diagnostic with the archived CPU binary reproduced both the original
+Eco **480 and 510 PPM SHA-256 hashes exactly**. Its terminal RAM identifies the
+active `logo` process state as **`ndi`**, animation name **`ndi-intro`**, spool
+index **3**, parts **4**, and active art stream **`ndi-intro`**. These mutually
+consistent markers identify the named sequence at frame 510 as the **Naughty
+Dog intro**, rather than the later title-logo reveal. Frame 480 is preserved
+as image-identical context; it has no separate terminal state snapshot.
+
+This establishes **sequence identity, not exact animation-pose alignment**.
+The existing independent reference includes the same intro. Context samples at
+PCSX2 GS 900 and 1200 show Daxter and the Naughty Dog logo/characters. They are
+not asserted to be the poses at Eco 480/510. No counter offset, pixel metric or
+tolerance across these unequal poses is justified. The exact Sony checkpoint
+match documented below remains valid; neither result establishes hardware truth.
+
+Private evidence: `local/reference-marker-20261022/`:
+
+- `result.json`, `markers-510/markers.json`: marker values, RAM identity, exact
+  image binding and reference context identities.
+- `validated-replay/`: fresh card/output, raw 480/510 PPMs and terminal RAM.
+- `sequence-comparison.png`: labeled native-size RGB tiles, with no crop or scale.
+  Eco is 512×448; selected PCSX2 intro targets are 512×224 before display
+  composition, padded in the layout. Poses are explicitly marked unaligned.
+- `replay-identity.json`, `jobs/`: verified frozen binary/ELF/disc identities,
+  archived environment, exact commands, timings and failures. The old frame-600
+  RAM dump was used only to validate the decoder layout, not to identify 510.
+
+The original read-only decoder `scripts/reference_event_markers.py` resolves
+retail Jak 1 symbol metadata, validates active-tree self/process-pointer links,
+and inspects the active logo and art stream. Four synthetic tests passed,
+covering the marker result, process-pointer corruption, a cyclic list and an
+unterminated string. The active-tree list terminates on GOAL's nonzero `#f`.
+Layout facts are from the local OpenGOAL revision
+[`c983c5f`](https://github.com/open-goal/jak-project/blob/c983c5f103d6b291849e8084a89df5de77f1cc67/decompiler/config/jak1/all-types.gc),
+using retail offset assertions rather than PC runtime layout. The corresponding
+[title logic](https://github.com/open-goal/jak-project/blob/c983c5f103d6b291849e8084a89df5de77f1cc67/goal_src/jak1/levels/title/title-obs.gc)
+provides semantic guidance; no recovered game code or data was copied into Git.
+
+There were **two CPU replay attempts**, about 96.4 s each. The first reached 510
+but omitted a pre-created capture directory, so no image binding was possible.
+That attempt was preserved; the corrected repeat created a fresh directory and
+passed both exact hash checks before its markers were used. A postprocessor also
+initially rejected non-UTF-8 guest log bytes; it now checks the ASCII stop marker
+as bytes. An initial preview size assertion exposed the 224-line reference target;
+the corrected labeled preview preserves native sizes. All failures remain in jobs/.
+No PCSX2 launch, rebuild, GPU comparison or VU reinvestigation occurred.
+
+Executed shape (exact private paths are in `replay-identity.json` and jobs/):
+
+```sh
+mkdir -p "$PRIVATE/validated-replay/frames"
+PS2_WINDOW_FULL=1 PS2_GS=cpu PS2_DUMP="$PRIVATE/validated-replay/terminal-ram.bin" \
+  "$ARCHIVED_RUNNER" "$USER_ELF" --disc "$USER_ISO" --frames 510 \
+  --memcard "$PRIVATE/validated-replay/fresh-card.ps2" \
+  --misses "$PRIVATE/validated-replay/misses.txt" \
+  --frames-dir "$PRIVATE/validated-replay/frames" --frame-every 480
+python3 scripts/reference_event_markers.py \
+  --ram "$PRIVATE/validated-replay/terminal-ram.bin" --output "$PRIVATE/markers-510"
+python3 -m unittest discover -s scripts -p test_reference_event_markers.py -v
+```
+
+The replay used the common serial supervisor, a clean PS2 environment and a
+160-second subprocess limit. Its binding wrapper verifies the archived binary,
+ELF/disc identities, normal frame-510 stop and both PPM hashes. The decoder never
+starts a game and writes only new ignored local output. A marker report alone
+must not be described as a visually aligned reference pose.
+
+Latest released ledger:
+`Eco-artifact-audit/local/artifact-audit-20261021/reference-marker-20261022-allocation.json`.
+Prior cumulative **7,744.883 s** + this diagnostic **196.905 s** = **7,941.788 /
+14,400 s**, leaving **6,458.212 s**. The preceding read-only alignment reservation
+was released without queued subprocess time. Marker reservation: 300 s active,
+64 MiB retained / 128 MiB peak. Retained growth **77,080,143 bytes** exceeded the
+64 MiB retained estimate because both RAM dumps were preserved, but remained
+inside the peak reservation and shared 8 GiB cap. Shared retained/sampled peak
+**4,113,836,817 bytes**; free **11,905,126,400 bytes**; private temporary sampled
+peak zero. Between-poll peaks/external caches remain unmeasured. Lock released,
+no game process left running; weekly remaining was 91% at stage checks.
+
+Next: select a matching **animation phase/camera pose within `ndi-intro`** using
+an independently verified phase marker. The current sequence comparison gives #3
+a reproducible starting point but not a same-pose GS/software/GPU verdict. Do not
+start another blind timed startup capture or infer the pose from counter offsets.
+No runtime expectation, tolerance or mismatch suppression changed.
+
+## Historical full reference pass (sequence identity subsequently resolved)
+
+The latest authorized continuation completed its **45-second** no-input pass.
+PCSX2 shut down cleanly after supervisor TERM (exit 0; raw supervisor category
+`timeout`, **45.414 s** including cleanup). The format-aware early-output guard
+worked. Fresh isolated data/BIOS working copies/card and both configuration checks
+were used; all existing input hashes were rechecked, and original BIOS material
+remains unchanged. There was one game process and no additional download/build.
+
+**152 validated native RGB PNG framebuffers, 124 unique, PCSX2 GS counters
+180..2385**, cover Sony presents, the Naughty Dog animation, the scenic transition,
+the title-logo reveal and the title with **Press Start**. These are framebuffer
+textures before display composition, not hardware output or composed screenshots.
+Unmodified originals and their hashes/timestamps stay private.
+
+There is now an **exact early checkpoint match**: the archived Eco CPU-compiled
+frames **25 and 100** and reference GS counter **330** show Sony Computer
+Entertainment America presents with **zero differing RGB pixels and maximum
+channel delta zero**, using no tolerance. This is one static scene, not a counter
+mapping or repeatability claim, and does not prove PS2 hardware correctness.
+
+**Eco 480/510 are still not aligned.** Read-only archive context (25, 100, 200,
+300, 400, 450, 480, 510) shows a recognizable Sony screen followed by severely
+distorted geometry. It supplies no recognizable pose/landmark that identifies
+480/510 within the captured reference sequence. Do not infer an event from similar
+colors, a counter offset or guessed seconds. The precise remaining gap is the
+identity of the animation/draw event represented by the distorted Eco images.
+There is no reason to collect another blind timed startup pass merely for later
+coverage: this capture already reaches the title screen.
+
+Private evidence root: `local/reference-later-20261022/`:
+
+- `cycle-result.json`: 152 image identities, observed reference events, commands,
+  limitations and explicit unresolved target mapping.
+- `identities.json`, `capture-settings.ini`, `reference.log`: original input/card
+  identities, requested settings and effective runtime warnings.
+- `framebuffers/`: untouched images. `overview-preview.png`, the five contact
+  sheets and `eco-context-preview.png` are labeled resized presentations.
+- `sony-anchor-comparison.json`: exact RGB comparison of the static Sony event.
+- `jobs/*.json`, `*.done`, `*.log`: expanded argv, limits, outcomes and timings.
+
+Executed command shapes below substitute variables for private paths; expanded
+argv and preparation/analysis programs are in that private root:
+
+```sh
+python3 "$PRIVATE/prepare.py"
+python3 scripts/reference_capture_preflight.py --private-root "$PRIVATE" \
+  --config "$PRIVATE/capture-settings.ini" --output "$PRIVATE/preflight"
+"$PCSX2_EXE" -earlyconsolelog -datapath "$PRIVATE/data" -testconfig
+# Serial supervisor: 45 s ceiling, PNG/BMP output check after 8 s.
+"$PCSX2_EXE" -earlyconsolelog -datapath "$PRIVATE/data" \
+  -logfile "$PRIVATE/reference.log" -fastboot -batch -nofullscreen -- "$USER_ISO"
+"$BUNDLED_PYTHON" "$PRIVATE/inspect.py"
+"$BUNDLED_PYTHON" "$PRIVATE/context.py"
+"$BUNDLED_PYTHON" "$PRIVATE/sony-anchor.py"
+```
+
+Latest released ledger:
+`Eco-artifact-audit/local/artifact-audit-20261021/reference-later-20261022-allocation.json`.
+Prior cumulative **7,694.947 s** + this cycle **49.936 s** = **7,744.883 /
+14,400 s**, leaving **6,655.117 s**. Reservation: 600 s active, 512 MiB retained /
+768 MiB peak. Shared retained/sampled peak **4,036,741,093 bytes**; free disk
+**12,568,244,224 bytes**; private temporary sampled peak zero. The common
+`serial.lock` is released and the emulator is stopped. Between-poll peaks and
+external caches remain unmeasured. Weekly usage was 94% remaining at startup and
+stage checks, above the user's 85%-remaining stop threshold. The shared 8 GiB cap
+and cumulative active debit continue across sessions.
+
+Smallest next step for #3/#5: correlate a named animation/draw event in the
+existing Eco evidence with this captured reference sequence. The exact Sony
+checkpoint supplies a common early landmark; it does not justify extrapolating
+to frame 510. If existing metadata cannot identify the later event, propose a
+narrow event-marker diagnostic separately, with renewed shared admission, before
+another replay. No runtime expectation/tolerance change or VU reinvestigation
+belongs in this reference cycle. First-level/gameplay and repeatability remain
+outside the captured coverage.
+
+## Historical eight-second continuation (superseded by the full pass)
+
+The newly authorized continuation used the existing verified PCSX2 2.8.2 binary
+and fresh private configuration, BIOS working copies and an erased card. Input
+hash checks, the configuration preflight and native `-testconfig` passed. No
+additional emulator, firmware or game download occurred.
+
+**Capture capability is now verified:** 14 validated, byte-identical RGB PNG
+framebuffers, 512×448, labeled PCSX2 GS counters **180..330**, show **Sony Computer
+Entertainment America presents**. These are an early startup checkpoint, not an
+aligned substitute for Eco frame 510. Eco 480/510 have no reliably matching
+landmark in this limited sequence. Neither emulator agreement nor these images
+establish PS2 hardware correctness; no expectations or tolerances changed.
+
+The one no-input game process stopped cleanly after **8.272 seconds**, before its
+45-second ceiling. The early-output monitor searched only for `*.bmp`; PCSX2
+emitted PNG, so its `capture_not_producing_images` reason was a **false negative**.
+The supervisor's raw outcome is preserved, not reclassified as a successful full
+pass. No game restart was attempted. The original helper now recognizes complete
+PNG and BMP outputs and ignores partial PNGs; all five synthetic tests pass.
+Future early-output monitoring must call `framebuffer_images()` rather than
+assume an extension from an upstream source-code filename.
+
+Private evidence: `local/reference-capture-20261022/`. `identities.json` records
+rechecked inputs, card and configuration identity; `capture-settings.ini` and
+`reference.log` retain requested and observed settings/warnings. `framebuffers/`
+holds all 14 untouched images. `cycle-result.json` records their SHA-256 hashes,
+filesystem timestamps, separate reference counters, the observed scene and
+alignment limits. `contact-sheet-preview.png` is a labeled resized overview,
+not an original. `jobs/` retains exact argv, timings and exit codes. Original
+BIOS hashes were rechecked unchanged. The attempted supervisor is preserved;
+`next-session-template.py` is a corrected **unexecuted** private template that
+still requires new paths, admission and allocation.
+
+Latest released ledger:
+`Eco-artifact-audit/local/artifact-audit-20261021/reference-capture-20261022-allocation.json`.
+Prior cumulative debit **7,683.226 s** + this cycle **11.721 s** = **7,694.947 /
+14,400 s**; remaining **6,705.053 s**. Reservation: 600 s, 512 MiB retained /
+768 MiB peak. Shared retained/sampled peak **4,008,191,481 bytes**; free disk
+**13,679,591,424 bytes**; private temporary sampled peak zero. The common lock is
+released. Between-poll peaks/external caches remain unmeasured. Account checks
+remained at 96% weekly available, above the 85%-remaining stop threshold.
+
+Smallest next step: a separately authorized/admitted longer no-input pass using
+the format-aware early-output helper, fresh isolated data/card/output, and the
+same finite dump range. Inspect later images to find a recognizable event near
+Eco 480/510; do not assume the PCSX2 counter or wall time is equivalent. Capture
+setup is no longer the prerequisite; target-scene coverage and alignment are.
+
+## Historical setup cycle (before independent images)
+
+The 2026-10-22 setup/reference cycle downloaded the official stable **PCSX2
+2.8.2** macOS release into ignored local storage. GitHub's release-asset SHA-256
+matched; deep/strict code-signature verification passed and Gatekeeper accepted
+the notarized Developer ID. The x86-64 binary ran using existing Rosetta on this
+arm64 macOS 26.6.2 host; bundle minimum OS is 11.0. Sources:
+[official release](https://github.com/PCSX2/pcsx2/releases/tag/v2.8.2) and
+[requirements](https://pcsx2.net/docs/setup/requirements/).
+
+The supplied BIOS directory had one ROM candidate. Read-only ROM-directory
+inspection, private hashes and PCSX2's successful BIOS load established local
+suitability for this setup; the original files were preserved and their hashes
+rechecked. No additional BIOS or game data was downloaded. A **new inventory**
+verified the disc and all four Eco anchors, leaving the earlier inventory intact.
+Executable help/version and isolated configuration initialization were verified.
+
+**No independent image or visual alignment was obtained.** There was one paused
+initialization (zero recorded play seconds), followed by one no-input game pass
+with a 45-second supervisor limit and clean exit after TERM. App-control requests
+timed out twice. The fallback built-in framebuffer dump produced zero files:
+the setup configured only the hardware dump directory, but this build requires
+both hardware and software dump directories. Its log explicitly disabled dumping.
+This was a configuration error, not evidence about image correctness. The failed
+settings and logs remain preserved. Both private directories are now configured;
+original preflight tooling and PCSX2's `-testconfig` accept the correction. No
+second game pass was attempted.
+
+Private evidence root: `local/reference-setup-20261022/`:
+
+- `provenance.json`, `release.json`: download, signature, compatibility and BIOS
+  inspection evidence; input identities stay private.
+- `inventory/inventory.json`: new selected-emulator/BIOS inventory.
+- `jobs/*.json`, `jobs/*.done`, `jobs/*.log`: exact argv, exit codes, limits and
+  timings, including the failed configuration initialization.
+- `capture-settings.ini`, `after-capture.ini`, `corrected-capture-settings.ini`:
+  preserved attempted settings and prepared correction. Actual renderer,
+  game-fix/patch warnings and timing observations are in `capture-reference.log`.
+- `initial-card.json`, `cycle-result.json`: new erased-card identity, artifact
+  hashes, no-input setup and failed capture result. Card, BIOS working copies,
+  configuration and captures stay ignored. Lossless PNG previews of the two Eco
+  anchors are labeled previews; original PPMs remain unchanged.
+- `preflight-failed/preflight.json`, `preflight-corrected/preflight.json`: expected
+  rejection (exit 2) and corrected configuration acceptance (exit 0).
+
+Worktree: `/Users/dallascarraher/Developer/Eco-startup-reference`, branch
+`codex/issue-5-startup-reference`, based on merged #10 (`7ef6532`). Existing
+checkouts/builds/translations/evidence remain unchanged. Neither Eco output nor
+PCSX2 agreement would establish PS2 hardware correctness.
+
+## Verified Eco anchor
+
+Use `boot-idle/eco-00510`, SCUS_971.24 USA Rev 1, no controller presses, fresh-card
+scenario. Archive: `Eco-issue-4/local/experiments/issue4-q-images-510/`, measured
+from source `da6352fa70669c9b3a0c6e420ed79d65322a2b27`. CPU compiled and interpreted
+captures match each other and their recorded hashes:
+
+| Eco frame | Capture SHA-256, both CPU paths |
+| --- | --- |
+| 480 | `7240b9940ca6ba6017d7bbf18ae366a5d12404718bd2335143d2452770dbc77a` |
+| 510 | `dea10cb896ab35570b90055b66f367813ae03ac888a1bc5f44e34eda847540be` |
+
+These are alignment anchors, not golden images or proof of the first wrong frame.
+The archived 98 available captures cover 25..510 every five frames; 5/10/15/20
+are absent. New-build repeatability and independent visual correctness were not
+established by that archive. See [the historical validation](ISSUE4-VU-PREFIX.md#post-q-fix-image-validation).
+
+## Inventory reproduction
+
+`scripts/reference_inventory.py` reads metadata and hashes inputs; it never starts
+the emulator. It writes private JSON to a new ignored directory. Example from
+this worktree, under the shared serial allocation:
+
+```sh
+python3 scripts/reference_inventory.py --output local/reference-inventory/inventory \
+  --eco-report /Users/dallascarraher/Developer/Eco-issue-4/local/experiments/issue4-q-images-510/report.json \
+  --iso '/Users/dallascarraher/Developer/Eco/Jak and Daxter - The Precursor Legacy (USA) (En,Fr,De,Es,It) (Rev 1).iso'
+```
+
+That command exited 0: inventory succeeded; capture was not attempted. Do not
+overwrite its output. For a later inventory use a new directory and add explicit
+`--emulator /path/to/PCSX2.app` (or executable) and `--bios /path/to/user-bios.bin`.
+The tool hashes selected files privately; bundle version metadata alone does not
+verify CLI version or capture support. Disc mismatch or changed anchor bytes fail
+the inventory. BIOS details, disc hashes, paths, configuration and screenshots
+stay in ignored local storage. Do not acquire firmware or disc images elsewhere.
+
+## One-event capture procedure for a separately admitted continuation
+
+1. Renew shared admission and acquire the common cross-checkout serial lock.
+   Inspect the installed build's help/version and verify its executable hash;
+   no capabilities are established merely by these online instructions.
+2. Create a **new private application-data directory**. Create the parent passed
+   to `-datapath` first: PCSX2 2.8.2 appends `PCSX2/` and does not recursively
+   create a missing parent. The first attempt otherwise shows a modal error.
+   Identify the selected user BIOS and same disc by hash. Do not alter the user's global emulator
+   configuration, reuse an unrelated save state/card or automatically copy a
+   personal configuration. Record any setup work inside the private directory.
+3. Record build/version, BIOS identity, renderer/backend, resolution, interlacing,
+   aspect/output size, patches/cheats, game fixes, speedhacks, boot method, pacing,
+   controller bindings/disconnections and memory-card initial state. Match the
+   Eco fresh-card scenario where supported; otherwise record the mismatch before
+   interpreting images. Keep normal timing and no Start pulse. Eco's direct ELF
+   launch and reference fast boot need not have equivalent initial state.
+4. Establish a capture mechanism supported by that build. Record whether it
+   captures raw GS output, an emulator screenshot or a composed desktop window.
+   No frame-limit or screenshot CLI option has been verified. Read the relevant
+   computer-use skill before any UI capture/setup. Confirm the shutdown and
+   process-group timeout mechanism before launching a game.
+5. Make one bounded no-input pass, stopping at the visual event corresponding to
+   the Eco anchor. Capture only the minimum nearby views needed for alignment,
+   with timestamps and separate Eco/reference counters. Use frame 480 as context.
+   Label the scene only after inspecting both sides. Do not assume reference
+   frame 510 or guessed seconds represent the same event. Stop if alignment fails.
+6. Preserve originals and hashes. Describe temporal, crop/scale, interlace and
+   renderer differences separately from geometry/content. Any presentation
+   transform produces a new labeled artifact. Do not add comparison tolerances,
+   suppress pixel mismatches, change Eco expectations or call emulator output
+   PS2 hardware truth. A repeatability claim needs a separately bounded repeat.
+7. Hand #3 the aligned event description, local artifact hashes, settings and
+   uncertainty. A software/GPU difference suggests a GS stream reduction; a
+   shared independently demonstrated defect suggests tracing common inputs.
+   Neither inference exonerates VU or proves the other backend correct.
+
+The [official PCSX2 CLI documentation](https://github.com/PCSX2/pcsx2-net-www/blob/main/docs/advanced/cli.md)
+lists `-datapath`, `-logfile`, `-fastboot`, `-batch`, `-version` and `-help`.
+`-portable` overrides `-datapath`; do not combine them for isolation. `-gamecfg`
+alone is not application-data isolation. `-batch` exits on shutdown; it is not a
+time limit. After local help/setup verification, the launch shape is:
+
+```sh
+"$PCSX2_EXE" -datapath "$REFERENCE_DATA" -logfile "$REFERENCE_LOG" \
+  -fastboot -batch -nofullscreen -- "$USER_ISO"
+```
+
+This is a protocol template; the executed variant is recorded below and privately.
+Use private paths and the external bounded supervisor. Do not leave a game running
+while waiting for model input. No runtime/browser/GS/input fix belongs in this track.
+
+## Framebuffer configuration gate
+
+`scripts/reference_capture_preflight.py` checks a private PCSX2 2.8.2 INI without
+launching it. This is a narrow gate for the built-in framebuffer dump path; it
+never verifies capture capability, input semantics, effective game overrides or
+visual alignment. It requires both existing private dump directories, enabled
+frame dumping and a finite frame range. PCSX2's own
+[`GSOptions::LoadSave`](https://github.com/PCSX2/pcsx2/blob/v2.8.2/pcsx2/Pcsx2Config.cpp)
+disables `DumpGSData` if either directory is empty, even for a hardware renderer.
+The dump saves framebuffer textures before display composition, so it is not an
+emulator screenshot or raw PS2 hardware output. Local executable behavior must
+still confirm output creation early in a future pass.
+
+Executed commands below use variables for private inputs. Exact expanded argv
+and the attempted settings are retained in the private jobs and result manifest:
+
+```sh
+python3 scripts/reference_inventory.py --output "$PRIVATE/inventory" \
+  --eco-report "$ECO_REPORT" --iso "$USER_ISO" \
+  --emulator "$PCSX2_APP" --bios "$USER_BIOS"
+"$PCSX2_EXE" -datapath "$PRIVATE/data" -help
+"$PCSX2_EXE" -datapath "$PRIVATE/data" -version
+"$PCSX2_EXE" -earlyconsolelog -datapath "$PRIVATE/data" -testconfig
+# Actual game pass: external serial supervisor imposed a 45-second limit.
+"$PCSX2_EXE" -earlyconsolelog -datapath "$PRIVATE/data" \
+  -logfile "$PRIVATE/capture-reference.log" -fastboot -batch -nofullscreen \
+  -- "$USER_ISO"
+python3 -m unittest discover -s scripts -p test_reference_capture_preflight.py -v
+python3 scripts/reference_capture_preflight.py --private-root "$PRIVATE" \
+  --config "$PRIVATE/capture-settings.ini" --output "$PRIVATE/preflight-failed"
+python3 scripts/reference_capture_preflight.py --private-root "$PRIVATE" \
+  --config "$PRIVATE/corrected-capture-settings.ini" --output "$PRIVATE/preflight-corrected"
+```
+
+All three synthetic tests passed. The negative check reproduced the real missing
+software-directory failure. Corrected native configuration initialization exited
+0 with no dump-directory warning. That does not demonstrate a working capture.
+The BIOS companions were copied only into the private setup so emulator writes
+could not affect the supplied originals. Configuration snapshots describe the
+controller bindings, card, renderer and compatibility choices; inspect them and
+the effective log before treating a later capture as comparable.
+
+## Historical setup accounting and continuation
+
+Latest released ledger:
+`Eco-artifact-audit/local/artifact-audit-20261021/reference-setup-allocation.json`.
+Prior inventory debit: **7,493.570 s**. This cycle: **189.656 s**, including a
+conservative recovery debit for the first configuration timeout and 5 s for
+out-of-queue surface discovery/preview conversion. Cumulative: **7,683.226 /
+14,400 s**, leaving **6,716.774 s**. Reservation was 1,500 s active, 768 MiB
+retained / 1 GiB peak, under the common `serial.lock`; it is now released.
+
+Shared retained/sampled peak: **3,994,692,762 bytes**; private temporary sampled
+peak: zero; free disk: **13,663,531,008 bytes**. Between-poll peaks and external
+system/Rosetta caches are unmeasured. The first timeout's TERM stopped PCSX2;
+a subsequent group KILL returned EPERM, interrupting supervisor accounting.
+A fresh process census verified no survivors before accounting recovery and
+lock reacquisition. The later game timeout and shutdown completed normally.
+
+The user-authorized shared cap is **8 GiB**, superseding older 2 GiB prose.
+Remeasure before another allocation; keep >=10 GiB free, run serially, and limit
+every subprocess to <=900 s. The cap and cumulative debit never reset by chat,
+branch or issue. Weekly usage was checked at startup and between stages: 96%
+remained throughout; stop at 85% remaining. No overnight matrix was run.
+
+Historical next step (performed in the continuation above): a separately admitted short no-input capture
+pass using both corrected private dump directories, with a fresh erased card
+and a new output/data directory. Confirm that the first framebuffer files are
+actually written; stop early if not. Recheck configuration/compatibility warnings
+and record effective settings. Then align the scene visually using Eco 480 as
+context for 510, without assuming matching counters. There is no event description,
+reference frame identity or image hash to hand #3 yet. No missing software/BIOS
+prerequisite remains; working capture and event alignment remain unverified.
