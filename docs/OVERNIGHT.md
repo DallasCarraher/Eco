@@ -1,5 +1,12 @@
 # Mac mini overnight workflow
 
+This is an execution reference. Select the next experiment from the
+[current roadmap](ROADMAP.md) first. The next task is the bounded OpenGOAL
+feasibility experiment; the Eco reference investigation is paused after PR #11.
+The native runner is already merged; no fresh matrix is scheduled.
+The default limits below do not reset an ongoing investigation's cumulative
+budget or replace its latest recorded allocation.
+
 Yes: the expensive experiment loop can run without any model calls. A model is
 useful to design the experiment and interpret results afterward; replay,
 comparison, hashing and reporting should be normal programs.

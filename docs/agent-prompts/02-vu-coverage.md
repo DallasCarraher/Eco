@@ -1,5 +1,9 @@
 # Prompt: bounded VU whole-invocation coverage
 
+**Historical handoff, completed for its saved-input objective:** PR #10 is merged.
+Read the [current issue audit](../work-items/README.md) before assigning work.
+The constraints and accounting below describe the original task, not a new run.
+
 Repository: DallasCarraher/Eco
 Primary checkout: /Users/dallascarraher/Developer/Eco
 Preserved investigation checkout: /Users/dallascarraher/Developer/Eco-issue-4

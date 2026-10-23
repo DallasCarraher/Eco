@@ -1,5 +1,17 @@
 # Startup reference protocol: boot-idle scene near Eco frame 510
 
+## Handoff after PR #11: investigation paused
+
+PR #11 is merged at `71016a2` (reviewed head `cdd1ccb`). All 15 original
+reference-tool tests and the diff check passed at merge; no new game runs were
+made during review. The owner chose to preserve this checkpoint and move to the
+[bounded OpenGOAL experiment](agent-prompts/05-opengoal-feasibility.md).
+Exact-pose alignment and graphics correctness remain unverified; #3/#4/#5 stay
+open. The audio-position question below is a possible future diagnostic, not
+the current assignment or a prerequisite for the experiment. All captures,
+states, RAM and cumulative ledgers remain local and intact. The chronological
+results and their historical next steps follow.
+
 ## Current result: phase bracket measured; exact pose not observed
 
 The saved image-identical Eco frame-510 RAM contains a coordinated phase for

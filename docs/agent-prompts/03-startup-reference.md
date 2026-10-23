@@ -1,8 +1,14 @@
-# Continue issue #5: ndi-intro phase bracket measured, exact pose unverified
+# Paused handoff for issue #5: ndi-intro phase bracket measured
+
+**Historical continuation, paused by the owner after merging PR #11.** Preserve
+the remaining pose mismatch and all local evidence. Do not resume the work below
+from this prompt alone. The next task is the
+[OpenGOAL feasibility experiment](05-opengoal-feasibility.md); use the
+[current roadmap](../ROADMAP.md) for priority. The original handoff follows.
 
 Repository DallasCarraher/Eco; worktree
 `/Users/dallascarraher/Developer/Eco-startup-reference`, branch
-`codex/issue-5-startup-reference`, draft PR #11. Preserve all builds, inputs,
+`codex/issue-5-startup-reference`, merged PR #11. Preserve all builds, inputs,
 translations, captures, states and ledgers. Read applicable AGENTS.md, README,
 REFERENCE.md and the revised roadmap/work queue (roadmap-audit worktree if needed).
 Never request Copilot review without explicit owner instruction. Do not repeat

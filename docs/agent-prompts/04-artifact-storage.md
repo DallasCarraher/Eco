@@ -1,5 +1,10 @@
 # Prompt: evidence-preserving artifact storage audit
 
+**Historical handoff:** storage auditing and subsequent experiment allocations
+have already occurred. Reuse the current accounting and remeasure when an actual
+experiment needs it; the figures below are not a fresh allocation. See the
+[current issue audit](../work-items/README.md) for task order.
+
 Repository: DallasCarraher/Eco
 Primary checkout: /Users/dallascarraher/Developer/Eco
 Preserved investigation checkout: /Users/dallascarraher/Developer/Eco-issue-4

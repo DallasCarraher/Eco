@@ -34,7 +34,9 @@ The project has not committed to a full OpenGOAL port.
 
 When selecting the next work, follow this order:
 
-1. Compare one matching startup scene in Eco and an independent reference.
+1. Use the completed startup-reference checkpoint from merged PR #11. Its Sony
+   screen matches exactly; the intro pose mismatch remains open. Further exact
+   pose/audio-timing investigation is paused and does not block the prototype.
 2. Test a bounded OpenGOAL prototype covering real function calls, data loading,
    pause/resume behavior, and representative rendering.
 3. Choose one main trilogy implementation from the evidence.
@@ -53,12 +55,14 @@ Avoid developing two complete trilogy ports at once.
 - Inspect the working tree, branch, and related worktrees before editing.
   Check current issue comments and PR state when they affect the task. Distinguish
   merged work, draft work, historical results, and proposed experiments.
-- The October 22, 2026 audit found that the native experiment runner and VU
-  fixes/checking work were already merged through PRs #9/#10. Older checkouts
-  still describe them as unimplemented. Verify revisions before repeating work.
-- The revised roadmap was prepared in the `codex/roadmap-audit` worktree. If it
-  has not reached the current branch, locate it with `git worktree list` and
-  read it there. Do not overwrite or merge another task's changes automatically.
+- The October 22, 2026 audit found the native runner and VU fixes/checking merged
+  through PRs #9/#10; PR #11 now adds reference tooling and measured findings.
+  Older checkouts still describe them as unimplemented. Verify revisions before
+  repeating work. Exact pose alignment, rendering correctness and gameplay
+  remain unverified; #3/#4/#5 stay open.
+- The revised roadmap and [OpenGOAL experiment brief](docs/agent-prompts/05-opengoal-feasibility.md)
+  define the next work. Historical reference/VU prompts are not current task
+  assignments. Do not overwrite or merge another task's changes automatically.
 - Historical prompts and earlier report sections are context, not a fresh task
   assignment or budget. Follow later evidence and the user's current scope.
 
