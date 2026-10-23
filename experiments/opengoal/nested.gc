@@ -1,0 +1,11 @@
+;; Original fixture. The real actor-wait-for-period definition is supplied locally.
+;; Runtime services are implemented by the experimental host, never success stubs.
+(defun eco-inner ((duration time-frame))
+  (let ((saved 77))
+    (actor-wait-for-period duration)
+    (+ saved 5)))
+
+(defun eco-entry ()
+  (let ((duration (eco-load-duration))
+        (saved 123))
+    (+ saved (eco-inner duration))))
