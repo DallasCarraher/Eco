@@ -3,8 +3,10 @@
 An experimental effort to run **Jak and Daxter: The Precursor Legacy** in a
 browser using WebAssembly and WebGPU, toward the eventual goal of the full series.
 
-**Next:** test a bounded OpenGOAL browser prototype, then choose the main trilogy
-approach. The startup-reference investigation is paused at its documented checkpoint;
+**Next:** complete the [bounded OpenGOAL proofs](docs/OPENGOAL-FEASIBILITY.md),
+starting with native kernel suspension parity. A generated real-function fixture
+now matches native and Chrome execution, but original kernel behavior and
+representative rendering remain unverified; no trilogy approach is selected. The startup-reference investigation is paused at its documented checkpoint;
 exact animation-pose matching is an open follow-up, not a prerequisite for the trial.
 Start with the [plain-language roadmap](docs/ROADMAP.md) and
 [issue audit](docs/work-items/README.md). The

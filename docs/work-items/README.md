@@ -1,6 +1,6 @@
 # Issue audit and work queue
 
-Updated October 22, 2026 after PR #11 merged. Start with the
+Updated October 23, 2026 with partial OpenGOAL results after PR #12. Start with the
 plain-language [roadmap](../ROADMAP.md).
 This page reconciles the original tickets with completed work; the numbered
 files retain the detailed contracts and investigation history.
@@ -54,9 +54,14 @@ merge; absence of completion evidence is not proof that nobody has started.
 
 ## Next handoffs
 
-1. Run the [two-part OpenGOAL feasibility trial](../agent-prompts/05-opengoal-feasibility.md):
-   real generated execution with nested pause/resume, plus representative browser
-   rendering. No ticket exists yet. Read the brief and latest cumulative budget
+1. Complete the [two-part OpenGOAL feasibility trial](../agent-prompts/05-opengoal-feasibility.md):
+   [partial results](../OPENGOAL-FEASIBILITY.md) now show mechanically generated
+   execution of one real wait function in native and Chrome builds, with preserved
+   nested locals and matching traces. Explicit clock/suspend adapters and original
+   loaded data leave native kernel parity and general object loading unverified.
+   Rendering is blocked at the missing browser packet/asset consumer. Next obtain
+   **native OpenGOAL kernel suspension parity for the nested wait**; both proofs
+   still must be completed before selecting an architecture. No ticket exists yet. Read the brief and latest cumulative budget
    before execution; this documentation update starts no experiment.
 2. Record an architecture decision using the trial and existing Eco evidence.
    If uncertain, name one missing proof and its bounded cost.
@@ -65,8 +70,11 @@ merge; absence of completion evidence is not proof that nobody has started.
 
 Prompts 02–04 are historical handoffs, not a fresh queue or budget allocation.
 The VU coverage prompt's saved-input objective is complete; the reference prompt
-is paused. Prompt 05 is the new feasibility brief. Existing storage/accounting
+is paused. Prompt 05 defines the still-incomplete feasibility proofs. Existing storage/accounting
 constraints remain in force; inspect the latest ledger when scheduling work.
-The last reference release recorded 7,979.183 / 14,400 seconds used and
-6,420.817 seconds remaining under the shared 8 GiB cap. These are historical
-balances, not a new allocation; other work may have consumed more since then.
+The OpenGOAL release ledger conservatively records 8,458.442 / 14,400 seconds
+used and 5,941.558 seconds remaining, with 5,160,406,077 retained bytes under the
+shared 8 GiB cap. Its locator is
+`Eco-artifact-audit/local/artifact-audit-20261021/opengoal-feasibility-final-allocation.json`.
+These are released balances, not a new allocation; inspect later ledgers before
+resuming.

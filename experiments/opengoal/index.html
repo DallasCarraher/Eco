@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><pre id="output"></pre>
+<script>
+const ecoOutput = document.getElementById('output');
+window.onerror = message => ecoOutput.textContent += 'BROWSER_ERROR '+message+'\n';
+var Module = {
+ print: text => ecoOutput.textContent += text+'\n',
+ printErr: text => ecoOutput.textContent += 'BROWSER_ERROR '+text+'\n',
+ onRuntimeInitialized: () => Module.callMain(['/duration.dat'])
+};
+</script><script src="timers.js"></script>

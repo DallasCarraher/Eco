@@ -1,7 +1,7 @@
 # Eco: next steps
 
-Updated October 22, 2026 after merging PR #11 at `71016a2` (reviewed head
-`cdd1ccb`), building on the audit of issues #1–#8 and merged PRs #9/#10.
+Updated October 23, 2026 with the partial OpenGOAL experiment on merged
+PR #12 base `dd90204`, preserving the reference checkpoint from PR #11.
 See the [issue audit](work-items/README.md) for evidence and ticket status.
 
 **Goal:** eventually run every Jak and Daxter game locally in a browser.
@@ -10,10 +10,11 @@ control the camera, hear audio, save, and reload after restarting the browser.
 
 ## Recommendation
 
-Test a small OpenGOAL browser prototype next. The owner chose to pause the
-startup-reference investigation at its measured checkpoint rather than extend
-it into audio-timing work. Use the existing Eco evidence and the prototype to
-choose one main approach for the trilogy before more extensive development.
+Complete native OpenGOAL kernel suspension parity for the generated nested-wait
+prototype next. The initial native/browser traces match through an explicit
+adapter, but both full feasibility proofs remain incomplete. Keep the Eco
+startup-reference investigation paused and obtain the missing evidence before
+choosing one main trilogy implementation.
 
 Eco translates the original PS2 program and recreates console services.
 OpenGOAL provides recovered game source and a PC runtime that we could adapt
@@ -45,12 +46,25 @@ it only if a named architecture question or chosen implementation needs it.
 Do not repeat setup/capture work or accept a nearest pose as exact. This open
 question does not block the OpenGOAL experiment; no graphics gate is marked passed.
 
-## 1. Test a small OpenGOAL browser example — next task
+## 1. OpenGOAL browser experiment — partial evidence
+
+The [bounded feasibility report](OPENGOAL-FEASIBILITY.md) records a real recovered
+wait function lowered through OpenGOAL IR to generated C++, with matching native
+and Chrome traces across three nested suspension/resumption events. This uses
+explicit clock/suspend adapters and original loaded data. It does **not** verify
+native OpenGOAL kernel parity or general game object loading. Representative
+rendering is blocked at the missing OpenGOAL-to-browser renderer interface.
+Neither required proof is complete; no architecture or gameplay gate passed.
+
+Next: obtain **native OpenGOAL kernel suspension parity for the nested wait**,
+within the latest remaining allocation. Retain the renderer proof as a separate
+unfulfilled requirement before choosing the trilogy implementation. Preserve the
+existing native compiler build and private failed/passing attempts.
 
 Use the [experiment brief](agent-prompts/05-opengoal-feasibility.md).
-No GitHub issue exists for it yet. Prototype a compiler path that generates
-C++ while retaining GOAL as the authoritative game source; do not hand-port
-the game or assume an existing portable backend.
+No GitHub issue exists for it yet. The narrow prototype generates
+C++ while retaining GOAL as the authoritative game source. Extend it only for
+the named missing proof; do not hand-port the game or assume a complete backend.
 
 Test a real object that loads data, calls other functions and the runtime,
 pauses inside nested calls, and resumes correctly. Compare native/browser

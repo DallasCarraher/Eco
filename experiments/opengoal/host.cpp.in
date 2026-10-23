@@ -1,0 +1,75 @@
+// Original bounded host for experimental generated IR, not a game runtime.
+#include <array>
+#include <cstdint>
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <vector>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+struct Frame { uint64_t fn; unsigned pc = 0; unsigned dest = 0; std::array<uint64_t,256> r{}; };
+const char* names[] = {@LABELS@};
+std::vector<Frame> stack;
+uint64_t tick = 41, result = 0, duration = 0;
+bool yielded = false;
+void call(uint64_t fn, unsigned dest, std::initializer_list<uint64_t> args) {
+  if (fn >= sizeof(names)/sizeof(*names)) throw std::runtime_error("invalid function");
+  std::cout << "call " << names[fn] << " tick=" << tick << '\n';
+  if (fn == @CLOCK@) { stack.back().r[dest] = tick; return; }
+  if (fn == @LOAD@) { stack.back().r[dest] = duration; return; }
+  if (fn == @SUSPEND@) { stack.back().r[dest] = 0; yielded = true; return; }
+  if (stack.size() >= 16 || args.size() > 8) throw std::runtime_error("frame limit");
+  Frame next{fn}; next.dest = dest;
+  unsigned index = 0; for (auto value : args) next.r[index++] = value;
+  stack.push_back(next);
+}
+void finish(uint64_t value) {
+  std::cout << "return " << names[stack.back().fn] << " value=" << value << '\n';
+  auto dest = stack.back().dest; stack.pop_back();
+  if (stack.empty()) result = value; else stack.back().r[dest] = value;
+}
+unsigned steps=0, yields=0;
+bool paused=false;
+void next_frame() {
+  if (paused) {
+    paused=false; ++tick;
+    std::cout << "resume depth=" << stack.size() << " tick=" << tick << '\n';
+  }
+    while (!stack.empty()) {
+      if (++steps > 10000) throw std::runtime_error("instruction limit");
+      auto& f = stack.back();
+      switch(f.fn) {
+@BLOCKS@
+      default: throw std::runtime_error("invalid function");
+      }
+      if (yielded) {
+        yielded = false; ++yields;
+        std::cout << "yield depth=" << stack.size() << " tick=" << tick << '\n';
+        paused = true; return;
+      }
+    }
+  std::cout << "RESULT " << result << " yields=" << yields << " ticks=" << tick << '\n';
+
+#ifdef __EMSCRIPTEN__
+  emscripten_cancel_main_loop();
+#endif
+}
+int main(int argc, char** argv) {
+  try {
+    if (argc != 2) throw std::runtime_error("duration file required");
+    std::ifstream input(argv[1], std::ios::binary);
+    unsigned char bytes[8]{};
+    if (!input.read(reinterpret_cast<char*>(bytes), 8) || input.peek() != EOF)
+      throw std::runtime_error("expected exactly one little-endian uint64");
+    for (unsigned i=0; i<8; ++i) duration |= uint64_t(bytes[i]) << (8*i);
+    if (duration > 8) throw std::runtime_error("duration exceeds finite tick budget");
+    stack.reserve(16); stack.push_back(Frame{@ENTRY@});
+#ifdef __EMSCRIPTEN__
+    emscripten_set_main_loop(next_frame, 60, 1);
+#else
+    while (!stack.empty()) next_frame();
+#endif
+    return result == 205 && yields == duration ? 0 : 1;
+  } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 2; }
+}
