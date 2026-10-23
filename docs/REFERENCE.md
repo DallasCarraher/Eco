@@ -1,6 +1,93 @@
 # Startup reference protocol: boot-idle scene near Eco frame 510
 
-## Current result: complete bounded startup capture; target mapping unresolved
+## Current result: frame-510 sequence identified as Naughty Dog intro
+
+A narrow diagnostic with the archived CPU binary reproduced both the original
+Eco **480 and 510 PPM SHA-256 hashes exactly**. Its terminal RAM identifies the
+active `logo` process state as **`ndi`**, animation name **`ndi-intro`**, spool
+index **3**, parts **4**, and active art stream **`ndi-intro`**. These mutually
+consistent markers identify the named sequence at frame 510 as the **Naughty
+Dog intro**, rather than the later title-logo reveal. Frame 480 is preserved
+as image-identical context; it has no separate terminal state snapshot.
+
+This establishes **sequence identity, not exact animation-pose alignment**.
+The existing independent reference includes the same intro. Context samples at
+PCSX2 GS 900 and 1200 show Daxter and the Naughty Dog logo/characters. They are
+not asserted to be the poses at Eco 480/510. No counter offset, pixel metric or
+tolerance across these unequal poses is justified. The exact Sony checkpoint
+match documented below remains valid; neither result establishes hardware truth.
+
+Private evidence: `local/reference-marker-20261022/`:
+
+- `result.json`, `markers-510/markers.json`: marker values, RAM identity, exact
+  image binding and reference context identities.
+- `validated-replay/`: fresh card/output, raw 480/510 PPMs and terminal RAM.
+- `sequence-comparison.png`: labeled native-size RGB tiles, with no crop or scale.
+  Eco is 512×448; selected PCSX2 intro targets are 512×224 before display
+  composition, padded in the layout. Poses are explicitly marked unaligned.
+- `replay-identity.json`, `jobs/`: verified frozen binary/ELF/disc identities,
+  archived environment, exact commands, timings and failures. The old frame-600
+  RAM dump was used only to validate the decoder layout, not to identify 510.
+
+The original read-only decoder `scripts/reference_event_markers.py` resolves
+retail Jak 1 symbol metadata, validates active-tree self/process-pointer links,
+and inspects the active logo and art stream. Four synthetic tests passed,
+covering the marker result, process-pointer corruption, a cyclic list and an
+unterminated string. The active-tree list terminates on GOAL's nonzero `#f`.
+Layout facts are from the local OpenGOAL revision
+[`c983c5f`](https://github.com/open-goal/jak-project/blob/c983c5f103d6b291849e8084a89df5de77f1cc67/decompiler/config/jak1/all-types.gc),
+using retail offset assertions rather than PC runtime layout. The corresponding
+[title logic](https://github.com/open-goal/jak-project/blob/c983c5f103d6b291849e8084a89df5de77f1cc67/goal_src/jak1/levels/title/title-obs.gc)
+provides semantic guidance; no recovered game code or data was copied into Git.
+
+There were **two CPU replay attempts**, about 96.4 s each. The first reached 510
+but omitted a pre-created capture directory, so no image binding was possible.
+That attempt was preserved; the corrected repeat created a fresh directory and
+passed both exact hash checks before its markers were used. A postprocessor also
+initially rejected non-UTF-8 guest log bytes; it now checks the ASCII stop marker
+as bytes. An initial preview size assertion exposed the 224-line reference target;
+the corrected labeled preview preserves native sizes. All failures remain in jobs/.
+No PCSX2 launch, rebuild, GPU comparison or VU reinvestigation occurred.
+
+Executed shape (exact private paths are in `replay-identity.json` and jobs/):
+
+```sh
+mkdir -p "$PRIVATE/validated-replay/frames"
+PS2_WINDOW_FULL=1 PS2_GS=cpu PS2_DUMP="$PRIVATE/validated-replay/terminal-ram.bin" \
+  "$ARCHIVED_RUNNER" "$USER_ELF" --disc "$USER_ISO" --frames 510 \
+  --memcard "$PRIVATE/validated-replay/fresh-card.ps2" \
+  --misses "$PRIVATE/validated-replay/misses.txt" \
+  --frames-dir "$PRIVATE/validated-replay/frames" --frame-every 480
+python3 scripts/reference_event_markers.py \
+  --ram "$PRIVATE/validated-replay/terminal-ram.bin" --output "$PRIVATE/markers-510"
+python3 -m unittest discover -s scripts -p test_reference_event_markers.py -v
+```
+
+The replay used the common serial supervisor, a clean PS2 environment and a
+160-second subprocess limit. Its binding wrapper verifies the archived binary,
+ELF/disc identities, normal frame-510 stop and both PPM hashes. The decoder never
+starts a game and writes only new ignored local output. A marker report alone
+must not be described as a visually aligned reference pose.
+
+Latest released ledger:
+`Eco-artifact-audit/local/artifact-audit-20261021/reference-marker-20261022-allocation.json`.
+Prior cumulative **7,744.883 s** + this diagnostic **196.905 s** = **7,941.788 /
+14,400 s**, leaving **6,458.212 s**. The preceding read-only alignment reservation
+was released without queued subprocess time. Marker reservation: 300 s active,
+64 MiB retained / 128 MiB peak. Retained growth **77,080,143 bytes** exceeded the
+64 MiB retained estimate because both RAM dumps were preserved, but remained
+inside the peak reservation and shared 8 GiB cap. Shared retained/sampled peak
+**4,113,836,817 bytes**; free **11,905,126,400 bytes**; private temporary sampled
+peak zero. Between-poll peaks/external caches remain unmeasured. Lock released,
+no game process left running; weekly remaining was 91% at stage checks.
+
+Next: select a matching **animation phase/camera pose within `ndi-intro`** using
+an independently verified phase marker. The current sequence comparison gives #3
+a reproducible starting point but not a same-pose GS/software/GPU verdict. Do not
+start another blind timed startup capture or infer the pose from counter offsets.
+No runtime expectation, tolerance or mismatch suppression changed.
+
+## Historical full reference pass (sequence identity subsequently resolved)
 
 The latest authorized continuation completed its **45-second** no-input pass.
 PCSX2 shut down cleanly after supervisor TERM (exit 0; raw supervisor category
