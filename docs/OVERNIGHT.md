@@ -1,5 +1,11 @@
 # Mac mini overnight workflow
 
+This is an execution reference. Select the next experiment from the
+[current roadmap](ROADMAP.md) first; the immediate task is one reference-aligned
+scene comparison, not a fresh full matrix. The native runner is already merged.
+The default limits below do not reset an ongoing investigation's cumulative
+budget or replace its latest recorded allocation.
+
 Yes: the expensive experiment loop can run without any model calls. A model is
 useful to design the experiment and interpret results afterward; replay,
 comparison, hashing and reporting should be normal programs.

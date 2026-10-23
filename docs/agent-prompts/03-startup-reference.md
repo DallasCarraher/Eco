@@ -1,5 +1,10 @@
 # Prompt: independent startup reference comparison
 
+**Historical handoff:** draft PR #11 now has the emulator/BIOS setup and early
+startup images. Continue from that branch's current reference report and handoff;
+the remaining task is later scene alignment. See the
+[current issue audit](../work-items/README.md) before using this original prompt.
+
 Repository: DallasCarraher/Eco
 Primary checkout: /Users/dallascarraher/Developer/Eco
 Preserved investigation checkout: /Users/dallascarraher/Developer/Eco-issue-4

@@ -1,76 +1,95 @@
-# Eco roadmap: evidence before expansion
+# Eco: next steps
 
-## Goal and current evidence
+Audited October 22, 2026 against issues #1–#8, PRs #9–#11, merged code
+`7ef6532`, and draft reference work `ff34092`.
+See the [issue audit](work-items/README.md) for evidence and ticket status.
 
-Run Jak and Daxter: The Precursor Legacy in a browser, with correct rendering,
-controls, audio and saves. The first playable milestone is Sandover Village.
+**Goal:** eventually run every Jak and Daxter game locally in a browser.
+**First playable milestone:** start Jak 1, reach Sandover Village, move around,
+hear audio, save, and reload.
 
-Baseline implementation: `8295c34a38f69090a0bea502a744e1ee503f6b48`.
-The local USA Rev 1 image boots as `SCUS_971.24`. Native exploration reached a
-600-frame limit. The latest saved Chrome probe reached 891 frames and 2,659,668
-primitives, then halted at `0x0068AA28` (return address `0x006896BC`). Geometry is
-wrong. These are observations of particular runs, not performance scores or
-proof of gameplay. Native and browser inputs currently differ.
+## Recommendation
 
-## Execution model
+Finish one focused graphics comparison, then test a small OpenGOAL browser
+prototype. Use those results to choose one main approach for the trilogy
+before investing in more extensive development.
 
-An agent designs or fixes a small piece of code, runs synthetic checks, and
-hands a frozen experiment to a normal program. That program does the expensive
-work without model calls: replay inputs, run comparisons, hash outputs, group
-failures, enforce limits, and write a report. An agent reviews the completed
-report once and selects the next bounded investigation.
+Eco translates the original PS2 program and recreates console services.
+OpenGOAL provides recovered game source and a PC runtime that we could adapt
+to the browser. Neither has demonstrated playable browser Jak in this project.
 
-Deterministic means reproducible inputs and recorded outputs. Timing, GPU
-rounding and uninitialized state can still make results differ; repeat runs
-must measure this before images are used as regression assertions. The existing
-VU interpreter is a comparison implementation, not an independent hardware
-oracle. Agreement between two Eco paths does not establish PS2 correctness.
+## Already completed
 
-## Milestones and gates
+- The automatic native experiment runner is implemented and merged. Reuse it.
+- VU fixes (the PS2's vector-math processors) and focused native/browser checks
+  are merged in PRs #9/#10. One saved long calculation now compares fully.
+- Draft PR #11 has captured the Sony startup screen in PCSX2, an independent
+  PS2 emulator. The later target scene still needs matching to Eco.
 
-| Milestone | Required evidence | Work items |
-| --- | --- | --- |
-| M0: Repeatable, unattended experiments | Isolated outputs; verified revision/build/disc identities; bounded execution; two repeated startup scenarios; honest failure classification | 01 harness, 02 browser parity |
-| M1: Correct startup rendering | First bad frame localized; software/GPU and compiled/interpreted differences explained; Sony/title/intro checkpoints reviewed against a working reference; regression for each fix | 03 GS isolation, 04 VU isolation, 05 reference |
-| M2: Reach the first playable area | No missing code on the chosen route; safe relocation/invalidation tests; title-to-Sandover input replay | 06 GOAL coverage, depends on M0 and M1 for visual signoff |
-| M3: Verified browser gameplay | Movement, camera, collision, audio and save/reload checklist passes in Chrome | 07 gameplay |
-| M4: Practical browser delivery | Measured frame times, loading and memory budgets on named devices; no correctness regressions | 08 performance |
+Correct graphics and playable browser gameplay remain unproven.
 
-M0 is the immediate priority. Native GS/VU investigations can proceed after the
-native harness, while browser parity and reference capture are developed
-separately. Reference capture can start immediately if PCSX2 and a user-provided
-BIOS are available. Shared builds and game output directories must have one
-writer. Do not run concurrent agents against the same generated build.
+## 1. Compare the same scene — next task
 
-## Decision points
+Continue [#5](https://github.com/DallasCarraher/Eco/issues/5) from
+[draft PR #11](https://github.com/DallasCarraher/Eco/pull/11), then
+[#3](https://github.com/DallasCarraher/Eco/issues/3).
 
-- If CPU images are correct and GPU images are wrong, isolate GS/WebGPU state,
-  transfers and shaders using a captured packet stream.
-- If interpreted VU execution changes the bad geometry, isolate the first state
-  divergence and reduce it to a synthetic instruction test.
-- If both paths agree on wrong output, inspect their shared inputs, DMA/VIF
-  decoding and GS state, using reference evidence. Agreement is not exoneration.
-- Missing function coverage is tracked separately from graphics correctness.
-  Do not treat a later halt address or larger frame count as a rendering fix.
-- After one bounded GS/VU/reference investigation cycle, write a continuation
-  decision: concrete bugs and reproductions found, remaining gaps, and whether
-  further runtime work or a separately scoped OpenGOAL WASM feasibility study
-  is justified. Do not start a second port architecture by default.
+Use the existing reference setup and corrected image detection to capture
+the event corresponding to Eco frame 510, with frame 480 as context. Match
+the visible scene; the programs' frame numbers are not interchangeable.
 
-Ghidra/REA can help analyze a specific unidentified routine after traces narrow
-the fault. OpenGOAL already provides useful names, types and recovered logic.
-Neither replaces behavioral comparisons or regression tests.
+**Finish with:** side-by-side images and an explanation of any defect.
+Compare Eco's software/GPU output to narrow its cause. Limit this to one
+focused investigation, ending with a reproducible problem or a precise blocker.
 
-## Materials and ownership
+## 2. Test a small OpenGOAL browser example
 
-- [Overnight runbook](OVERNIGHT.md): machine setup, budgets, handoff and stop rules.
-- [Experiment contract](EXPERIMENTS.md): manifest and result semantics.
-- [Startup matrix](../experiments/jak1-startup.json): data-only input for
-  `scripts/run_experiments.py`, the bounded native runner from work item 01.
-- [Work items](work-items/README.md): GitHub links, dependencies and agent scopes.
+New proposed task; no GitHub issue yet. Generate C++ through OpenGOAL's
+compiler while retaining GOAL as the game source.
 
-Every issue should end with a reproducible command, a small source diff when
-needed, meaningful validation, and a concise evidence summary. Game-derived
-captures stay in ignored local storage; commit original synthetic regressions
-and diagnostic tooling. The roadmap does not schedule a job or grant another
-machine access. No unattended job is started by this planning change.
+Test a real object that loads data, calls other functions and the runtime,
+pauses inside nested calls, and resumes correctly. Compare native/browser
+state. Separately try drawing level geometry, an animated character, and
+a texture effect.
+
+**Finish with:** working examples or specific blockers, required source
+changes, and basic size/memory/speed measurements. Set a finite effort budget
+before starting. A simple arithmetic function or blank canvas is insufficient.
+
+## 3. Choose one main trilogy approach
+
+Prefer OpenGOAL if the examples work and changes remain concentrated in the
+compiler, runtime, and renderer. Continue Eco if its remaining faults are
+understood and it has a credible general solution for loading relocated code.
+
+**Finish with:** one decision based on remaining work to reach Sandover.
+If uncertain, identify one missing proof and its cost. Preserve the other
+implementation without developing two complete ports at once.
+
+## 4. Make Jak 1 playable, then expand
+
+For Eco: finish matching native/browser inputs (#2), address code-loading gaps
+(#6), and validate gameplay (#7). If OpenGOAL is chosen, replace Eco-specific
+tasks while keeping the same acceptance requirements.
+
+**Finish with:** two fresh starts of the Sandover route, usable controls and
+camera, correct visible behavior, audible sound, and save/reload across a browser
+restart. This verifies the route, not the whole game.
+
+Then measure performance (#8), test Jak 1's remaining levels and transitions,
+and add Jak II/3. Evaluate Jak X, Daxter, and The Lost Frontier separately;
+one browser interface can support different execution engines.
+
+## Keep the work focused
+
+Expand tooling only when a named next test requires it. Revisit VU diagnostics
+when a new failure points there. Defer broad optimization and other game ports.
+
+Existing milestone names remain: M0 = repeatable native/browser tests;
+M1 = correct startup graphics; M2 = reaching Sandover; M3 = gameplay/audio/saves;
+M4 = performance. Only M0's native-runner portion is complete.
+
+Use the [experiment details](EXPERIMENTS.md) and [runbook](OVERNIGHT.md) for
+commands and limits. Preserve evidence and cumulative budgets; serialize shared
+builds/measurements. Game-derived files stay local. This plan starts no experiment,
+changes no GitHub issue state, and grants no new experiment budget.
