@@ -1,86 +1,65 @@
-# Prompt: independent startup reference comparison
+# Paused handoff for issue #5: ndi-intro phase bracket measured
 
-**Historical handoff:** draft PR #11 now has the emulator/BIOS setup and early
-startup images. Continue from that branch's current reference report and handoff;
-the remaining task is later scene alignment. See the
-[current issue audit](../work-items/README.md) before using this original prompt.
+**Historical continuation, paused by the owner after merging PR #11.** Preserve
+the remaining pose mismatch and all local evidence. Do not resume the work below
+from this prompt alone. The next task is the
+[OpenGOAL feasibility experiment](05-opengoal-feasibility.md); use the
+[current roadmap](../ROADMAP.md) for priority. The original handoff follows.
 
-Repository: DallasCarraher/Eco
-Primary checkout: /Users/dallascarraher/Developer/Eco
-Preserved investigation checkout: /Users/dallascarraher/Developer/Eco-issue-4
+Repository DallasCarraher/Eco; worktree
+`/Users/dallascarraher/Developer/Eco-startup-reference`, branch
+`codex/issue-5-startup-reference`, merged PR #11. Preserve all builds, inputs,
+translations, captures, states and ledgers. Read applicable AGENTS.md, README,
+REFERENCE.md and the revised roadmap/work queue (roadmap-audit worktree if needed).
+Never request Copilot review without explicit owner instruction. Do not repeat
+merged VU/native/browser work or start an alternate port by default.
 
-Read applicable AGENTS.md, docs/ROADMAP.md, docs/EXPERIMENTS.md,
-docs/OVERNIGHT.md, docs/work-items/04.md, docs/ISSUE4-VU-FLAGS.md and
-docs/ISSUE4-VU-PREFIX.md before acting. Inspect working trees and preserve
-existing work. Start from the merged issue-4 corrections (at least 22762de,
-or their merged equivalent). Create a dedicated checkout and the branch named
-below. Treat all existing investigation builds/generated/game-output folders
-as read-only. Never share writable build/generated/game-output directories.
-Do not reset, clean, rebase or delete another task's worktree.
+Eco frame510 is `ndi-intro` (Naughty Dog intro), established by a frozen CPU
+replay that exactly reproduced archived frame480/510 PPM hashes. Saved RAM has
+five coordinated channels: logo, camera-anim, volumes, Jak, Daxter. Their local
+frame is **43.818359375 / 0x422f4600**, interpolation zero, speed .5, artist
+base115 and step1. Original group names and exact bits are in target-pose.json.
 
-All game inputs, assets, translations, traces and captures stay in ignored
-local storage. Never commit ISO/BIOS/assets/game-derived code or images.
-No model/API calls inside replay/comparison programs. Neither Eco path is an
-independent correctness oracle. No tolerances, changed expectations or
-suppressed mismatches. No browser/input/GS fixes or architecture expansion.
+Latest authorized reference probe: one fresh isolated PCSX2 startup process,
+normal pacing/no guest input, private local PINE socket, read-only guest-memory
+queries and two host state saves. No state load or guest RAM write. It stopped
+cleanly after 23.196s and recorded 477 phase observations. In the same streamed
+part, adjacent coherent phases are **43.583984375** and **44.052734375**. Eco's
+phase lies halfway between them, ±0.234375. No exact phase was observed.
+Saved-state RAM confirms phases39.013671875/44.052734375. Later state's five
+channel records match Eco in group/speed/base/step/command/interpolation; ONLY
+frame bits differ (+0.234375). **Do not call this exact-pose aligned.** This one
+pass does not prove the same grid occurs on every possible reference run.
 
-Budget is shared across these follow-ups, not a fresh allowance per session.
-The last ledger was about 1.89 GiB retained under a 2 GiB cap, about 113 MiB
-remaining, at least 27 GiB free, and under 20 minutes measured game subprocess
-time (build/synthetic time separate). Re-measure before adding artifacts.
-Keep >=10 GiB free, <=900 seconds per subprocess and <=4 hours cumulative
-active experiments. Diagnostic cases are serial, including across sessions.
-Run the storage-audit follow-up first. Until its storage/time allocation is
-explicit and no other diagnostic is running, do read-only analysis only;
-do not silently reset budgets or start concurrent runs. Do not delete or
-rewrite evidence to make room. Record peak temporary as well as retained use.
+Latest private evidence `local/reference-pose-20261022/`: target-pose.json,
+probe.json, phase-observations.json, phase-result.json, capture-settings.ini,
+reference.log, jobs/, saved states under data/PCSX2/sstates/, extracted screenshots
+and phase-comparison.png. The latter is labeled phase-bracketed context, not an
+exact match. Eco512x448, PCSX2 state screenshot640x480 already aspect-corrected by
+emulator; layout adds padding/labels only. No crop/scale/tolerance/pixel assertion.
+All images/RAM/BIOS/disc/settings stay ignored/local. Original hashes rechecked.
 
-Proceed autonomously within this scope, then stop after one bounded cycle.
-Commit original source/test/documentation changes only; do not merge or message
-other sessions unless the user authorizes it. Report branch/commits, exact
-commands, identities, results, artifact locations, limits and smallest next
-experiment. If blocked, preserve evidence and report the precise missing input.
+Original reference_pose.py supplies bounded PINE reads and retail five-channel
+pose input extraction; six synthetic tests pass (protocol/read bounds, linked
+channels, invalid link, one-bit phase distinction). No native/browser rebuild
+or VU investigation. PCSX2 2.8.2 is already verified; no download or BIOS search
+needed. Earlier reference/marker/inventory evidence remains historical.
 
-Also read docs/work-items/05.md. Branch: codex/issue-5-startup-reference
+Latest released ledger:
+`/Users/dallascarraher/Developer/Eco-artifact-audit/local/artifact-audit-20261021/reference-pose-20261022-allocation.json`.
+Cumulative **7,979.183 /14,400 s**, remaining **6,420.817 s**. Shared retained/
+sampled peak **4,153,755,479 bytes**, free **12,484,788,224 bytes**. Reservation
+600s,192MiB retained/256MiB peak; active37.395s. Lock released/emulator stopped.
+Remeasure and inspect newer allocations before admission; shared cap8GiB,
+>=10GiB free, <=900s/subprocess, serial diagnostics, no budget reset. Weekly
+remaining last89%; stop at85% remaining and check between stages. No subagents,
+overnight matrix, model/API calls inside replay programs or session messages.
 
-Objective: obtain a small, reproducible independent reference comparison for
-startup frames near the previously observed image divergence. Treat reference
-emulator output as identified evidence with configuration limits, not automatic
-PS2 hardware truth. This task produces reference evidence; it does not fix GS,
-VU, input handling or compatibility.
-
-Existing Eco evidence is read-only under:
-/Users/dallascarraher/Developer/Eco-issue-4/local/experiments/issue4-q-images-510/
-Read report.json, summary.md and case logs. CPU compiled/interpreted reach 510
-and their 98 available captures (25..510 every five frames) match exactly;
-requested 5/10/15/20 are absent. Frames 480 and 510 exist. Both sets also match
-the pre-Q-fix baseline. The flag-history correction removed the measured CPU
-image gap; the specific early sampled flags mismatch is not uniquely causal.
-Q correction fixed a state discrepancy without measured images changing.
-
-Local user-owned disc:
-/Users/dallascarraher/Developer/Eco/Jak and Daxter - The Precursor Legacy (USA) (En,Fr,De,Es,It) (Rev 1).iso
-
-Inspect narrowly for an installed suitable reference emulator and user-provided
-BIOS/configuration. Prefer its supported deterministic CLI/capture facilities;
-read applicable app/computer-use skills before controlling an app. Do not
-download BIOS or assets, purchase/install software, or change the user's
-existing emulator configuration. Use a private configuration/output directory.
-If BIOS or another required input is absent, ask for that exact missing input
-and continue read-only alignment planning; never substitute an unverified image.
-
-Record emulator version/build, disc/BIOS hashes privately, renderer/settings,
-patches, speedhacks, resolution/interlacing/aspect, input route and capture
-method. Use boot-idle, no Start pulse. Start with a tiny set near 480 and 510,
-and align by observable scene and event timing; emulator frame numbers need
-not share Eco's frame-count origin. Distinguish temporal, crop/resolution,
-interlace and renderer differences from geometry/content differences. Preserve
-original captures and document any separate analysis transforms; do not add
-runtime comparison tolerances or alter expected outputs.
-
-With allocated storage/time and serial ownership, make one bounded reference
-capture pass. Describe observable differences and supporting alignment; do
-not call either Eco path correct from agreement. If reference execution is
-unavailable, deliver the precise blocker and smallest reproducible capture
-procedure, without inventing results. Commit only documentation/original
-capture tooling, keeping game-derived images and BIOS details private.
+Next: inspect how streamed-audio position sampling produces the half-step phase
+offset, using the saved RAM/state evidence. Retail loader uses current-str-pos,
+not display counters. Do not make another blind startup capture, silently accept
+a nearest pose, blend images, change timing or force guest phase to claim exact
+alignment. Any new diagnostic needs a narrow hypothesis and renewed admission.
+Keep GS/backend causal attribution unknown and do not claim hardware truth.
+Update PR#11 and current summaries with exact evidence/commands and limits;
+commit original tooling/docs only. OpenGOAL prototype is a later scoped task.

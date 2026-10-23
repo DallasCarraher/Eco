@@ -3,8 +3,9 @@
 An experimental effort to run **Jak and Daxter: The Precursor Legacy** in a
 browser using WebAssembly and WebGPU, toward the eventual goal of the full series.
 
-**Next:** compare one startup scene against an independent reference, then test
-a small OpenGOAL browser prototype before choosing the main trilogy approach.
+**Next:** test a bounded OpenGOAL browser prototype, then choose the main trilogy
+approach. The startup-reference investigation is paused at its documented checkpoint;
+exact animation-pose matching is an open follow-up, not a prerequisite for the trial.
 Start with the [plain-language roadmap](docs/ROADMAP.md) and
 [issue audit](docs/work-items/README.md). The
 [Mac mini runbook](docs/OVERNIGHT.md) contains execution details.
@@ -17,9 +18,11 @@ on Apple Silicon/Metal reached animated 3D with distorted geometry, then halted
 on missing code. Later merged VU fixes brought the two tested CPU execution paths'
 98 available startup captures into agreement through frame 510, and focused
 native/browser fixtures pass. Those results do not establish correct rendering
-or full browser gameplay after the fixes. Draft PR #11 has independent early
-startup images; the later target scene still needs alignment. See the
-[audit](docs/work-items/README.md) for merged versus in-progress evidence.
+or full browser gameplay after the fixes. Merged PR #11 captures independent startup
+through the title screen, matches the static Sony screen exactly, and identifies
+Eco frame 510 as the Naughty Dog intro. Its small animation-phase difference
+remains unresolved. See the [reference report](docs/REFERENCE.md) and
+[audit](docs/work-items/README.md) for evidence and limits.
 
 Eco translates heap-loaded GOAL code, precompiles relocatable initialization
 templates, and includes a toSPR DMA tag-transfer fix needed by Jak's blend-shape

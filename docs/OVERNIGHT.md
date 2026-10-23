@@ -1,8 +1,9 @@
 # Mac mini overnight workflow
 
 This is an execution reference. Select the next experiment from the
-[current roadmap](ROADMAP.md) first; the immediate task is one reference-aligned
-scene comparison, not a fresh full matrix. The native runner is already merged.
+[current roadmap](ROADMAP.md) first. The next task is the bounded OpenGOAL
+feasibility experiment; the Eco reference investigation is paused after PR #11.
+The native runner is already merged; no fresh matrix is scheduled.
 The default limits below do not reset an ongoing investigation's cumulative
 budget or replace its latest recorded allocation.
 
