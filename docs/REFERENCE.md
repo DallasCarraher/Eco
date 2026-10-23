@@ -1,6 +1,83 @@
 # Startup reference protocol: boot-idle scene near Eco frame 510
 
-## Current result: independent early startup images, target still unaligned
+## Current result: complete bounded startup capture; target mapping unresolved
+
+The latest authorized continuation completed its **45-second** no-input pass.
+PCSX2 shut down cleanly after supervisor TERM (exit 0; raw supervisor category
+`timeout`, **45.414 s** including cleanup). The format-aware early-output guard
+worked. Fresh isolated data/BIOS working copies/card and both configuration checks
+were used; all existing input hashes were rechecked, and original BIOS material
+remains unchanged. There was one game process and no additional download/build.
+
+**152 validated native RGB PNG framebuffers, 124 unique, PCSX2 GS counters
+180..2385**, cover Sony presents, the Naughty Dog animation, the scenic transition,
+the title-logo reveal and the title with **Press Start**. These are framebuffer
+textures before display composition, not hardware output or composed screenshots.
+Unmodified originals and their hashes/timestamps stay private.
+
+There is now an **exact early checkpoint match**: the archived Eco CPU-compiled
+frames **25 and 100** and reference GS counter **330** show Sony Computer
+Entertainment America presents with **zero differing RGB pixels and maximum
+channel delta zero**, using no tolerance. This is one static scene, not a counter
+mapping or repeatability claim, and does not prove PS2 hardware correctness.
+
+**Eco 480/510 are still not aligned.** Read-only archive context (25, 100, 200,
+300, 400, 450, 480, 510) shows a recognizable Sony screen followed by severely
+distorted geometry. It supplies no recognizable pose/landmark that identifies
+480/510 within the captured reference sequence. Do not infer an event from similar
+colors, a counter offset or guessed seconds. The precise remaining gap is the
+identity of the animation/draw event represented by the distorted Eco images.
+There is no reason to collect another blind timed startup pass merely for later
+coverage: this capture already reaches the title screen.
+
+Private evidence root: `local/reference-later-20261022/`:
+
+- `cycle-result.json`: 152 image identities, observed reference events, commands,
+  limitations and explicit unresolved target mapping.
+- `identities.json`, `capture-settings.ini`, `reference.log`: original input/card
+  identities, requested settings and effective runtime warnings.
+- `framebuffers/`: untouched images. `overview-preview.png`, the five contact
+  sheets and `eco-context-preview.png` are labeled resized presentations.
+- `sony-anchor-comparison.json`: exact RGB comparison of the static Sony event.
+- `jobs/*.json`, `*.done`, `*.log`: expanded argv, limits, outcomes and timings.
+
+Executed command shapes below substitute variables for private paths; expanded
+argv and preparation/analysis programs are in that private root:
+
+```sh
+python3 "$PRIVATE/prepare.py"
+python3 scripts/reference_capture_preflight.py --private-root "$PRIVATE" \
+  --config "$PRIVATE/capture-settings.ini" --output "$PRIVATE/preflight"
+"$PCSX2_EXE" -earlyconsolelog -datapath "$PRIVATE/data" -testconfig
+# Serial supervisor: 45 s ceiling, PNG/BMP output check after 8 s.
+"$PCSX2_EXE" -earlyconsolelog -datapath "$PRIVATE/data" \
+  -logfile "$PRIVATE/reference.log" -fastboot -batch -nofullscreen -- "$USER_ISO"
+"$BUNDLED_PYTHON" "$PRIVATE/inspect.py"
+"$BUNDLED_PYTHON" "$PRIVATE/context.py"
+"$BUNDLED_PYTHON" "$PRIVATE/sony-anchor.py"
+```
+
+Latest released ledger:
+`Eco-artifact-audit/local/artifact-audit-20261021/reference-later-20261022-allocation.json`.
+Prior cumulative **7,694.947 s** + this cycle **49.936 s** = **7,744.883 /
+14,400 s**, leaving **6,655.117 s**. Reservation: 600 s active, 512 MiB retained /
+768 MiB peak. Shared retained/sampled peak **4,036,741,093 bytes**; free disk
+**12,568,244,224 bytes**; private temporary sampled peak zero. The common
+`serial.lock` is released and the emulator is stopped. Between-poll peaks and
+external caches remain unmeasured. Weekly usage was 94% remaining at startup and
+stage checks, above the user's 85%-remaining stop threshold. The shared 8 GiB cap
+and cumulative active debit continue across sessions.
+
+Smallest next step for #3/#5: correlate a named animation/draw event in the
+existing Eco evidence with this captured reference sequence. The exact Sony
+checkpoint supplies a common early landmark; it does not justify extrapolating
+to frame 510. If existing metadata cannot identify the later event, propose a
+narrow event-marker diagnostic separately, with renewed shared admission, before
+another replay. No runtime expectation/tolerance change or VU reinvestigation
+belongs in this reference cycle. First-level/gameplay and repeatability remain
+outside the captured coverage.
+
+## Historical eight-second continuation (superseded by the full pass)
 
 The newly authorized continuation used the existing verified PCSX2 2.8.2 binary
 and fresh private configuration, BIOS working copies and an erased card. Input
